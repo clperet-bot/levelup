@@ -6137,6 +6137,7 @@ function toggleProjComp(id, label, isCustom){
     _projSelectedIds.push(id);
   }
   renderProjSelectedChips();
+  renderActCompsCheck();
   // Mettre à jour le dropdown si visible
   const q = document.getElementById('proj-comp-search').value.trim().toLowerCase();
   showProjDropdown(q);
