@@ -2,7 +2,7 @@
   "name": "LevelUp",
   "short_name": "LevelUp",
   "description": "Suivi des apprentissages",
-  "start_url": "/levelup/",
+  "start_url": "/levelup/index.html",
   "scope": "/levelup/",
   "display": "standalone",
   "background_color": "#fff9f2",
