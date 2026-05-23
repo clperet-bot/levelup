@@ -1875,16 +1875,29 @@ const PROF_SKIN_DEFS = [
   {id:'blue',    cls:'s-prof-blue',    label:'Bleu ciel'},
 ];
 
-function getProfStats(){
-  try{ return JSON.parse(localStorage.getItem('prof_stats')||'{"evals":0,"projets":0,"rewards":0,"skins":0,"days":[]}'); }
-  catch(e){ return {evals:0,projets:0,rewards:0,skins:0,days:[]}; }
-}
-function saveProfStats(s){ localStorage.setItem('prof_stats', JSON.stringify(s)); }
+// prof_stats — migré depuis localStorage vers Supabase
+let _profStatsCache = null;
 
-function incrementProfStat(stat, amount=1){
-  const s = getProfStats();
+async function getProfStats(){
+  if(_profStatsCache !== null) return _profStatsCache;
+  try{
+    const rows = await sbFetch('prof_stats?select=evals,projets,rewards,skins,days&limit=1') || [];
+    _profStatsCache = rows[0] || {evals:0,projets:0,rewards:0,skins:0,days:[]};
+    return _profStatsCache;
+  }catch(e){ return {evals:0,projets:0,rewards:0,skins:0,days:[]}; }
+}
+
+async function saveProfStats(s){
+  _profStatsCache = s;
+  try{
+    await sbFetch('prof_stats', {method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:s});
+  }catch(e){ console.warn('saveProfStats error', e); }
+}
+
+async function incrementProfStat(stat, amount=1){
+  const s = await getProfStats();
   s[stat] = (s[stat]||0) + amount;
-  saveProfStats(s);
+  await saveProfStats(s);
   renderProfBadges();
 }
 
@@ -1901,7 +1914,7 @@ const PROF_SKIN_GRADIENTS = {
   'blue':    {bg:'linear-gradient(135deg,#dbeafe,#bfdbfe)', text:'#1e40af'},
 };
 
-function applyProfSkin(){
+async function applyProfSkin(){
   const skinId = getProfSkin();
   const skinStyle = PROF_SKIN_GRADIENTS[skinId] || PROF_SKIN_GRADIENTS['default'];
   const hdr = document.querySelector('#sc-prof .hdr');
@@ -1912,7 +1925,7 @@ function applyProfSkin(){
     if(backBtn) backBtn.style.color = skinStyle.text;
   }
   // Badges débloqués dans header
-  const stats = getProfStats();
+  const stats = await getProfStats();
   const earnedBadges = PROF_BADGE_DEFS.filter(b=>(stats[b.stat]||0)>=b.threshold).map(b=>b.ic);
   const subEl = document.getElementById('prof-mat-label');
   if(subEl && earnedBadges.length){
@@ -1921,17 +1934,17 @@ function applyProfSkin(){
   }
 }
 
-function setProfSkin(id){
+async function setProfSkin(id){
   localStorage.setItem('prof_skin', id);
-  const s = getProfStats(); s.skins = (s.skins||0)+1; saveProfStats(s);
+  const s = await getProfStats(); s.skins = (s.skins||0)+1; await saveProfStats(s);
   applyProfSkin();
   renderProfBadges();
 }
 
-function renderProfBadges(){
+async function renderProfBadges(){
   const cont = document.getElementById('prof-badges-section');
   if(!cont) return;
-  const stats = getProfStats();
+  const stats = await getProfStats();
   const curSkin = getProfSkin();
 
   cont.innerHTML = '';
@@ -2180,7 +2193,7 @@ async function renderMatProjHistory(){
   const evalEn = await getEvalProf(S.user.id, 'en');
   const histProfEn = scoresToHist(evalEn);
 
-  const opened = getOpenedProjects();
+  const opened = await getOpenedProjects();
 
   for(const mat of ['fr','en']){
     const cont = document.getElementById('mat-proj-history-'+mat);
@@ -2229,7 +2242,7 @@ async function renderMatProjHistory(){
           +'<div style="font-size:.72rem;color:#b45309;margin-top:2px">'+pLvl.lbl+' · 🪙 '+pCoins+' pièce'+(pCoins>1?'s':'')+' · En cours</div>'
           +'</div>'
           +'<span style="font-size:.8rem;color:#92400e;font-weight:800">→</span>';
-        card.onclick=()=>{ markProjectOpened(p.id); S.mat=mat; chooseMat(mat); };
+        card.onclick=async()=>{ await markProjectOpened(p.id); S.mat=mat; chooseMat(mat); };
         cont.appendChild(card);
       } else {
         const card = document.createElement('div');
@@ -2487,16 +2500,40 @@ async function renderGlobal(){
   }
 
   // ── Vérifier débloquages automatiques ──
-  checkAutoRewards(xpData, xpItems, stored||{}, proj);
+  await checkAutoRewards(xpData, xpItems, stored||{}, proj);
 }
 
-function checkAutoRewards(xpData, xpItems, stored, proj){
+// rewards_auto — migré depuis localStorage vers Supabase
+let _rewardsAutoCache = {}; // { "projId_mat": {skin1:true,...} }
+
+async function getAutoUnlocked(eleveId, projId, mat){
+  const key = projId+'_'+mat;
+  if(_rewardsAutoCache[key] !== undefined) return _rewardsAutoCache[key];
+  try{
+    const rows = await sbFetch('rewards_auto?eleve_id=eq.'+eleveId+'&proj_id=eq.'+projId+'&mat=eq.'+mat+'&select=data') || [];
+    const data = rows[0] ? rows[0].data : {};
+    _rewardsAutoCache[key] = data;
+    return data;
+  }catch(e){ return {}; }
+}
+
+async function saveAutoUnlocked(eleveId, projId, mat, data){
+  const key = projId+'_'+mat;
+  _rewardsAutoCache[key] = data;
+  try{
+    // Upsert
+    await sbFetch('rewards_auto', {method:'POST', prefer:'resolution=merge-duplicates,return=minimal', body:{eleve_id:eleveId, proj_id:projId, mat, data}});
+  }catch(e){ console.warn('saveAutoUnlocked error', e); }
+}
+
+async function checkAutoRewards(xpData, xpItems, stored, proj){
   if(!proj || !S.user) return;
   const {pct, counts, total} = xpData;
   const {bien, tresb, exc} = counts;
-  const unlockedKey = 'auto_unlocked_'+S.user.id+'_'+(proj.id||'none')+'_'+S.mat;
-  let unlocked = {};
-  try{ unlocked = JSON.parse(localStorage.getItem(unlockedKey)||'{}'); } catch(e){}
+  const eleveId = S.user.id;
+  const projId = proj.id || 'none';
+  const mat = S.mat;
+  let unlocked = await getAutoUnlocked(eleveId, projId, mat);
   let changed = false;
   // Skin 1 : 1ère compétence en Bien
   if(bien >= 1 && !unlocked['skin1']){ unlocked['skin1']=true; changed=true; showAutoRewardToast('🎨 Nouveau look débloqué ! Va dans Récompenses pour l\'activer.'); }
@@ -2510,7 +2547,7 @@ function checkAutoRewards(xpData, xpItems, stored, proj){
   if(pct >= 75 && !unlocked['skin3']){ unlocked['skin3']=true; changed=true; showAutoRewardToast('🎨 Nouveau look débloqué ! Va dans Récompenses.'); }
   // Badge Champion : Diamant★
   if(pct >= 100 && !unlocked['badge_champ']){ unlocked['badge_champ']=true; changed=true; showAutoRewardToast('🏆 Badge Champion débloqué !'); }
-  if(changed) localStorage.setItem(unlockedKey, JSON.stringify(unlocked));
+  if(changed) await saveAutoUnlocked(eleveId, projId, mat, unlocked);
 }
 
 function showAutoRewardToast(msg){
@@ -5066,7 +5103,7 @@ async function saveEvalProf(){
       .filter(([id,val])=>val!==null)
       .map(([id,val])=>addEvalProf(SE.eleveId, SE.mat, id, val));
     await Promise.all(promises);
-    if(promises.length>0) incrementProfStat('evals', promises.length);
+    if(promises.length>0) await incrementProfStat('evals', promises.length);
     // Sauvegarder comportement si smileys sélectionnés
     await saveComportementDB(SE.eleveId, SE.mat);
     resetComportement();
@@ -6633,20 +6670,31 @@ async function sauvegarderProjet(){
 }
 
 // ── CÔTÉ ÉLÈVE : afficher la tuile projet + historique sur sc-mat ──
-function getOpenedProjects(){
+// proj_vus — migré depuis localStorage vers Supabase
+let _projVusCache = null; // Set de proj_id déjà vus par l'élève courant
+
+async function getOpenedProjects(){
+  if(!S.user) return [];
+  if(_projVusCache !== null) return _projVusCache;
   try{
-    const arr = JSON.parse(localStorage.getItem('proj_opened')||'[]');
-    // Vider si contient des anciens IDs format proj_TIMESTAMP
-    if(arr.some(id=>id.startsWith('proj_'))){ localStorage.removeItem('proj_opened'); return []; }
-    return arr;
-  } catch(e){ return []; }
+    const rows = await sbFetch('proj_vus?eleve_id=eq.'+S.user.id+'&select=proj_id') || [];
+    _projVusCache = rows.map(r=>r.proj_id);
+    return _projVusCache;
+  }catch(e){ return []; }
 }
-function markProjectOpened(projId){
-  const opened = getOpenedProjects();
-  if(!opened.includes(projId)){ opened.push(projId); localStorage.setItem('proj_opened', JSON.stringify(opened)); }
+
+async function markProjectOpened(projId){
+  if(!S.user) return;
+  const opened = await getOpenedProjects();
+  if(opened.includes(projId)) return;
+  try{
+    await sbFetch('proj_vus', {method:'POST', prefer:'return=minimal', body:{eleve_id:S.user.id, proj_id:projId}});
+    _projVusCache = null;
+  }catch(e){ console.warn('markProjectOpened error', e); }
 }
-function isProjectNew(proj){
-  const opened = getOpenedProjects();
+
+async function isProjectNew(proj){
+  const opened = await getOpenedProjects();
   return !opened.includes(proj.id);
 }
 
@@ -6678,7 +6726,7 @@ async function renderProjElvTile(){
   const evalProf = await getEvalProf(S.user.id, S.mat);
   const histProf = scoresToHist(evalProf);
 
-  const opened = getOpenedProjects();
+  const opened = await getOpenedProjects();
 
   // ── Projet actif ──
   if(proj){
@@ -6720,7 +6768,7 @@ async function renderProjElvTile(){
       +'</div>'
       +'<div style="text-align:right;font-size:.62rem;color:#b45309;margin-top:4px;">Appuie pour t\'auto-évaluer →</div>'
       +'</div>';
-    btn.onclick = ()=>{ markProjectOpened(proj.id); openProjetEleve(proj); };
+    btn.onclick = async()=>{ await markProjectOpened(proj.id); openProjetEleve(proj); };
     tile.appendChild(btn);
   }
 
