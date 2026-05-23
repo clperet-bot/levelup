@@ -691,11 +691,20 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);font
 .nb .ni{font-size:1.3rem;}
 .nb.on{color:var(--blue);}
 </style>
-<style>body{visibility:hidden;opacity:0;transition:opacity .2s;}</style>
+<style>
+#loading-screen{position:fixed;inset:0;background:#fff9f2;z-index:99999;display:flex;align-items:center;justify-content:center;transition:opacity .4s;}
+#loading-screen.hide{opacity:0;pointer-events:none;}
+</style>
 </head>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-<body onload="document.body.style.visibility='visible';document.body.style.opacity='1'">
+<body>
+<div id="loading-screen">
+  <div style="text-align:center;font-family:'Nunito',sans-serif;">
+    <div style="font-size:2.5rem;font-weight:900;"><span style="color:#f59e0b">Level</span><span style="color:#ff6b35">Up</span></div>
+    <div style="font-size:.85rem;color:#92614a;margin-top:8px;font-weight:600;">Chargement...</div>
+  </div>
+</div>
 
 <!-- LOGIN -->
 <div class="screen active" id="sc-login" style="display:flex !important;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px;background:linear-gradient(160deg,#fff9f2 0%,#fff3e6 100%);">
@@ -1243,24 +1252,22 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);font
   <div class="proj-adm-block" style="margin-top:12px;">
     <div class="fg">
       <label>📋 Activités du projet</label>
-      <div style="font-size:.75rem;color:var(--muted);font-weight:600;margin-bottom:10px">Ajoute les activités que les élèves peuvent faire pour progresser. Tu peux les associer à plusieurs compétences.</div>
-
-      <!-- Suggestions d'activités déjà créées -->
-      <div id="activites-suggestions" style="margin-bottom:12px;"></div>
+      <div style="font-size:.75rem;color:var(--muted);font-weight:600;margin-bottom:12px;">Associe chaque activité aux compétences qu'elle travaille. Les élèves pourront naviguer par activité.</div>
 
       <!-- Saisie nouvelle activité -->
-      <div style="background:#f0f9ff;border-radius:14px;padding:14px;border:2px solid #bae6fd;">
-        <div style="font-weight:800;font-size:.82rem;color:#0369a1;margin-bottom:10px">➕ Nouvelle activité</div>
-        <input type="text" id="act-titre-input" placeholder="Ex: Exercice 1 — La phrase complexe"
-          oninput="renderActivitesSuggestions()"
-          style="width:100%;padding:10px 14px;border:2px solid #bae6fd;border-radius:10px;font-family:'Nunito',sans-serif;font-size:.88rem;outline:none;box-sizing:border-box;margin-bottom:10px;">
-        <div style="font-size:.75rem;font-weight:800;color:#0369a1;margin-bottom:6px;">Compétences associées :</div>
-        <div id="act-comps-check" style="display:flex;flex-direction:column;gap:5px;max-height:180px;overflow-y:auto;margin-bottom:10px;"></div>
-        <button class="btn-sm" style="background:linear-gradient(135deg,#0ea5e9,#0369a1);width:100%;padding:10px;" onclick="ajouterActivite()">➕ Ajouter cette activité</button>
+      <div style="background:#f0f9ff;border-radius:14px;padding:14px;border:2px solid #bae6fd;margin-bottom:12px;">
+        <div style="font-weight:800;font-size:.82rem;color:#0369a1;margin-bottom:10px;">➕ Nouvelle activité</div>
+        <input type="text" id="act-titre-input" placeholder="Ex: Lecture du texte p.12"
+          style="width:100%;padding:10px 14px;border:2px solid #bae6fd;border-radius:10px;font-family:'Nunito',sans-serif;font-size:.88rem;outline:none;box-sizing:border-box;margin-bottom:12px;">
+        <div style="font-size:.75rem;font-weight:800;color:#0369a1;margin-bottom:8px;">✅ Compétences travaillées dans cette activité :</div>
+        <div id="act-comps-check" style="display:flex;flex-direction:column;gap:6px;max-height:200px;overflow-y:auto;margin-bottom:12px;padding:4px 0;">
+          <div style="font-size:.75rem;color:var(--muted);font-style:italic;">Sélectionne d'abord des compétences dans le projet ci-dessus.</div>
+        </div>
+        <button style="width:100%;padding:10px;background:linear-gradient(135deg,#0ea5e9,#0369a1);color:#fff;border:none;border-radius:10px;font-family:'Nunito',sans-serif;font-weight:800;font-size:.85rem;cursor:pointer;" onclick="ajouterActivite()">➕ Ajouter cette activité</button>
       </div>
 
-      <!-- Liste des activités du projet -->
-      <div id="activites-list" style="margin-top:12px;"></div>
+      <!-- Liste des activités ajoutées -->
+      <div id="activites-list"></div>
     </div>
   </div>
   <div style="height:80px"></div>
@@ -1994,6 +2001,9 @@ function logout(){
   localStorage.removeItem('session');
   document.getElementById('bnav').style.display='none';
   goTo('sc-login');
+  // Cacher l'écran de chargement
+  const ls = document.getElementById('loading-screen');
+  if(ls){ ls.classList.add('hide'); setTimeout(()=>ls.remove(), 400); }
 }
 
 // ════════════════════════════════════════
@@ -6148,7 +6158,7 @@ function toggleProjComp(id, label, isCustom){
     _projSelectedIds.push(id);
   }
   renderProjSelectedChips();
-  renderActCompsCheck();
+  renderActCompsCheck(); // async mais pas besoin d'attendre
   // Mettre à jour le dropdown si visible
   const q = document.getElementById('proj-comp-search').value.trim().toLowerCase();
   showProjDropdown(q);
