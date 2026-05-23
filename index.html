@@ -2027,7 +2027,7 @@ async function chargerPoulsClasse(){
   cont.innerHTML='<div style="text-align:center;padding:16px;">⏳</div>';
 
   // Charger les élèves de la classe
-  const eleves = await sbFetch('eleves?classe_code=eq.'+classeCode+'&select=id,nom,prenom&order=nom.asc') || [];
+  const eleves = await sbFetch('eleves?code_classe=eq.'+classeCode+'&select=id,nom&order=nom.asc') || [];
 
   // Charger les humeurs du jour
   const today = new Date().toISOString().slice(0,10);
@@ -2049,7 +2049,7 @@ async function chargerPoulsClasse(){
   }
 
   eleves.forEach(elv=>{
-    const nom = elv.prenom+' '+elv.nom.charAt(0)+'.';
+    const nomAff = formatNomAffichage(elv.nom);
     const humeur = humeurMap[elv.id];
     const cmt = cmtMap[elv.id];
     const row = document.createElement('div');
@@ -2057,7 +2057,7 @@ async function chargerPoulsClasse(){
     const emoji = humeur!==undefined ? HUMEUR_EMOJIS[humeur]||'😐' : '—';
     row.innerHTML='<div style="font-size:1.4rem;width:32px;text-align:center;flex-shrink:0;">'+emoji+'</div>'
       +'<div style="flex:1;">'
-      +'<div style="font-size:.82rem;font-weight:700;color:#2d1a0e;">'+nom+'</div>'
+      +'<div style="font-size:.82rem;font-weight:700;color:#2d1a0e;">'+nomAff+'</div>'
       +(cmt?'<div style="font-size:.72rem;color:#92614a;margin-top:2px;font-style:italic;">'+cmt+'</div>':'')
       +'</div>';
     cont.appendChild(row);
