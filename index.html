@@ -3398,9 +3398,11 @@ async function openGraphCompList(mat, proj, section){
 
   let items=[];
   if(section==='projet' && proj){
+    const customComps = await getCustomComps();
     items=proj.itemIds.map(id=>{
       let label=id;
       for(const cat of DATA[mat].categories){ const it=cat.items.find(i=>i.id===id); if(it){label=it.l;break;} }
+      if(label===id){ const c=customComps.find(c=>c.id===id); if(c) label=c.label; }
       return {id, label};
     });
   } else {
