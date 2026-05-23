@@ -1315,7 +1315,7 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);font
 <div id="modal-pouls" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9998;align-items:flex-end;justify-content:center;padding:0;">
   <div style="background:#fff;border-radius:24px 24px 0 0;padding:20px 16px;width:100%;max-width:600px;max-height:85vh;overflow-y:auto;position:relative;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-      <div style="font-family:'Nunito',sans-serif;font-weight:900;font-size:1.05rem;color:#2d1a0e;">💬 Pouls de classe</div>
+      <div style="font-family:'Nunito',sans-serif;font-weight:900;font-size:1.05rem;color:#2d1a0e;">💜</div>
       <button onclick="document.getElementById('modal-pouls').style.display='none'" style="background:#f5f5f5;border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:1rem;">✕</button>
     </div>
     <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
@@ -2035,10 +2035,16 @@ async function chargerPoulsClasse(){
   const humeurMap = {};
   humeurs.forEach(h=>{ humeurMap[h.eleve_id] = h.valeur; });
 
-  // Charger les derniers commentaires projet
-  const cmts = await sbFetch('commentaires?matiere=eq.'+mat+'&select=eleve_id,texte,created_at&order=created_at.desc') || [];
-  const cmtMap = {};
-  cmts.forEach(c=>{ if(!cmtMap[c.eleve_id]) cmtMap[c.eleve_id]=c.texte; });
+  // Charger le projet actif pour cette matière et classe
+  const projActif = await getProjetActif(mat, classeCode);
+  const projId = projActif?.id;
+
+  // Charger les commentaires du projet actif uniquement
+  let cmtMap = {};
+  if(projId){
+    const cmts = await sbFetch('commentaires?matiere=eq.'+mat+'&cat_id=eq.projet_'+projId+'&select=eleve_id,texte,created_at&order=created_at.desc') || [];
+    cmts.forEach(c=>{ if(!cmtMap[c.eleve_id]) cmtMap[c.eleve_id]=c.texte; });
+  }
 
   const HUMEUR_EMOJIS = {0:'❤️',1:'😊',2:'😐',3:'😢',4:'😤',5:'😴'};
   cont.innerHTML='';
