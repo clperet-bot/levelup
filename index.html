@@ -691,20 +691,11 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);font
 .nb .ni{font-size:1.3rem;}
 .nb.on{color:var(--blue);}
 </style>
-<style>
-#loading-screen{position:fixed;inset:0;background:#fff9f2;z-index:99999;display:flex;align-items:center;justify-content:center;transition:opacity .4s;}
-#loading-screen.hide{opacity:0;pointer-events:none;}
-</style>
+
 </head>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 <body>
-<div id="loading-screen">
-  <div style="text-align:center;font-family:'Nunito',sans-serif;">
-    <div style="font-size:2.5rem;font-weight:900;"><span style="color:#f59e0b">Level</span><span style="color:#ff6b35">Up</span></div>
-    <div style="font-size:.85rem;color:#92614a;margin-top:8px;font-weight:600;">Chargement...</div>
-  </div>
-</div>
 
 <!-- LOGIN -->
 <div class="screen active" id="sc-login" style="display:flex !important;flex-direction:column;align-items:center;justify-content:center;padding:32px 20px;background:linear-gradient(160deg,#fff9f2 0%,#fff3e6 100%);">
@@ -1475,12 +1466,10 @@ let S = { user:null, mat:null, cat:null, classe:null, temp:{} };
 const SB_URL = 'https://ozxmvetlekgrqvwfhwua.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im96eG12ZXRsZWtncnF2d2Zod3VhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxODYxMDIsImV4cCI6MjA5Mzc2MjEwMn0.OR0Bnu9DUnYz1_m6BGNFjJ_laJzXD-b5qpqZdjfAZ0I';
 
-// Fallback — cacher l'écran de chargement après 3 secondes max
 function hideLoadingScreen(){
   const ls = document.getElementById('loading-screen');
-  if(ls){ ls.classList.add('hide'); setTimeout(()=>{ if(ls && ls.parentNode) ls.remove(); }, 400); }
+  if(ls) ls.remove();
 }
-setTimeout(hideLoadingScreen, 3000);
 
 async function sbFetch(path, opts={}){
   const headers = {
