@@ -2042,7 +2042,7 @@ async function chargerPoulsClasse(){
   // Charger les commentaires du projet actif uniquement
   let cmtMap = {};
   if(projId){
-    const cmts = await sbFetch('commentaires?matiere=eq.'+mat+'&cat_id=eq.projet_'+projId+'&select=eleve_id,texte,created_at&order=created_at.desc') || [];
+    const cmts = await sbFetch('commentaires?matiere=eq.'+mat+'&cat_id=eq.projet_'+projId+'&select=eleve_id,texte,updated_at&order=updated_at.desc') || [];
     cmts.forEach(c=>{ if(!cmtMap[c.eleve_id]) cmtMap[c.eleve_id]=c.texte; });
   }
 
