@@ -1671,9 +1671,11 @@ async function getHumeur(eleveId, mat){
 }
 
 async function upsertHumeur(eleveId, mat, emoji){
+  // Supprimer l'ancienne humeur puis insérer la nouvelle
+  await sbFetch('humeurs?eleve_id=eq.'+eleveId+'&matiere=eq.'+mat, {method:'DELETE'});
   return await sbFetch('humeurs', {
     method:'POST',
-    prefer:'resolution=merge-duplicates',
+    prefer:'return=minimal',
     body:{eleve_id:eleveId, matiere:mat, emoji, updated_at:new Date().toISOString()}
   });
 }
