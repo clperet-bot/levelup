@@ -6665,16 +6665,56 @@ async function openProjetEleve(proj){
   const acts = getActivitesProjet(proj.id);
   const allItemIdsInActs = new Set(acts.flatMap(a=>a.compIds||[]));
 
+  // Charger les modes
+  const allModes = await getActModes(S.user.id);
+  const modeMap = {};
+  allModes.filter(m=>m.proj_id===proj.id).forEach(m=>{ modeMap[m.act_id]=m.mode; });
+
   if(acts.length){
-    // Afficher les activités avec leurs compétences
     acts.forEach(act=>{
       const actBlock = document.createElement('div');
       actBlock.style.cssText='margin-bottom:16px;border-radius:16px;border:0.5px solid #bbf7d0;overflow:hidden;';
 
       const actHeader = document.createElement('div');
       actHeader.style.cssText='background:#dcfce7;padding:10px 16px;border-bottom:0.5px solid #bbf7d0;';
-      actHeader.innerHTML='<div style="font-size:.62rem;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.6px;margin-bottom:2px;">Activité</div>'
-        +'<div style="font-size:.92rem;font-weight:700;color:#14532d;">'+act.titre+'</div>';
+
+      const actTitleDiv = document.createElement('div');
+      actTitleDiv.innerHTML='<div style="font-size:.62rem;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.6px;margin-bottom:2px;">Activité</div>'
+        +'<div style="font-size:.92rem;font-weight:700;color:#14532d;margin-bottom:10px;">'+act.titre+'</div>';
+      actHeader.appendChild(actTitleDiv);
+
+      // Boutons oral/écrit/interaction
+      const modeLabel=document.createElement('div');
+      modeLabel.style.cssText='font-size:.68rem;font-weight:700;color:#15803d;margin-bottom:6px;';
+      modeLabel.textContent='Comment as-tu fait cette activité ?';
+      actHeader.appendChild(modeLabel);
+
+      const modeBtns=document.createElement('div');
+      modeBtns.style.cssText='display:flex;gap:6px;flex-wrap:wrap;';
+      const actKey=act.act_id||act.id;
+      const curMode=modeMap[actKey]||null;
+      [{k:'oral',l:'🗣️ Oral'},{k:'ecrit',l:'✍️ Écrit'},{k:'interaction',l:'💬 Interaction'}].forEach(({k,l})=>{
+        const btn=document.createElement('button');
+        const sel=curMode===k;
+        btn.style.cssText='padding:5px 12px;border-radius:20px;border:1.5px solid '+(sel?'#16a34a':'#bbf7d0')+';background:'+(sel?'#16a34a':'#fff')+';font-family:\'Nunito\',sans-serif;font-size:.72rem;font-weight:700;cursor:pointer;color:'+(sel?'#fff':'#15803d')+';';
+        btn.textContent=l;
+        btn.onclick=async(e)=>{
+          e.stopPropagation();
+          const nowSel=modeMap[actKey]===k;
+          const newMode=nowSel?null:k;
+          await saveActMode(S.user.id, proj.id, actKey, newMode);
+          modeMap[actKey]=newMode;
+          modeBtns.querySelectorAll('button').forEach((b,i)=>{
+            const bk=['oral','ecrit','interaction'][i];
+            const bsel=newMode===bk;
+            b.style.border='1.5px solid '+(bsel?'#16a34a':'#bbf7d0');
+            b.style.background=bsel?'#16a34a':'#fff';
+            b.style.color=bsel?'#fff':'#15803d';
+          });
+        };
+        modeBtns.appendChild(btn);
+      });
+      actHeader.appendChild(modeBtns);
       actBlock.appendChild(actHeader);
 
       const actBody = document.createElement('div');
