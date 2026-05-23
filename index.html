@@ -2251,14 +2251,14 @@ async function loadHumeur(){
   try {
     const emoji = await getHumeur(S.user.id, S.mat);
     ['hb0','hb1','hb2','hb3','hb4','hb5'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('on'); });
-    const map={'❤️':'hb0','😊':'hb1','😐':'hb2','😟':'hb3','😩':'hb4'};
+    const map={'❤️':'hb0','😊':'hb1','😐':'hb2','😟':'hb3','😩':'hb4','😴':'hb5'};
     if(emoji&&map[emoji]){ const el=document.getElementById(map[emoji]); if(el) el.classList.add('on'); }
   } catch(err){ console.warn('Chargement humeur echoue:', err); }
 }
 
 async function setHumeur(e){
   // Feedback visuel immédiat (optimistic update)
-  const map={'❤️':'hb0','😊':'hb1','😐':'hb2','😟':'hb3','😩':'hb4'};
+  const map={'❤️':'hb0','😊':'hb1','😐':'hb2','😟':'hb3','😩':'hb4','😴':'hb5'};
   ['hb0','hb1','hb2','hb3','hb4','hb5'].forEach(id=>{ const el=document.getElementById(id); if(el) el.classList.remove('on'); });
   if(map[e]){ const el=document.getElementById(map[e]); if(el) el.classList.add('on'); }
   // Sauvegarde en arriere-plan
@@ -2876,7 +2876,7 @@ function renderActivitesSuggestions(){
   });
 }
 
-function renderActCompsCheck(){
+async function renderActCompsCheck(){
   const mat = document.getElementById('proj-mat-input')?.value || 'fr';
   const cont = document.getElementById('act-comps-check');
   if(!cont) return;
@@ -2886,6 +2886,7 @@ function renderActCompsCheck(){
     cont.innerHTML='<div style="font-size:.75rem;color:var(--muted);font-style:italic;">Sélectionne d\'abord des compétences dans le projet ci-dessus.</div>';
     return;
   }
+  const customCompsLoaded = await getCustomComps();
   itemIds.forEach(id=>{
     let label = id;
     // Chercher dans DATA
@@ -2893,9 +2894,9 @@ function renderActCompsCheck(){
       const it = cat.items.find(i=>i.id===id);
       if(it){ label=it.l; break; }
     }
-    // Chercher dans le cache custom comps
-    if(label===id && _customCompsCache){
-      const c = _customCompsCache.find(c=>c.id===id);
+    // Chercher dans les custom comps
+    if(label===id){
+      const c = customCompsLoaded.find(c=>c.id===id);
       if(c) label = c.label;
     }
     const row = document.createElement('div');
@@ -2931,13 +2932,14 @@ function ajouterActivite(){
   renderActivitesSuggestions();
 }
 
-function renderActivitesProjetList(){
+async function renderActivitesProjetList(){
   const cont=document.getElementById('activites-list');
   if(!cont) return;
   const acts=window._projActivites||[];
   const mat=document.getElementById('proj-mat-input')?.value||'fr';
   cont.innerHTML='';
   if(!acts.length){ cont.innerHTML='<div style="font-size:.78rem;color:var(--muted);font-weight:600;text-align:center;padding:8px;">Aucune activité ajoutée.</div>'; return; }
+  const customCompsLoaded = await getCustomComps();
   const title=document.createElement('div');
   title.style.cssText='font-weight:800;font-size:.82rem;color:var(--text);margin-bottom:8px;';
   title.textContent='✅ Activités de ce projet ('+acts.length+') :';
@@ -2953,7 +2955,7 @@ function renderActivitesProjetList(){
       const names=a.compIds.map(id=>{
         let label=id;
         for(const cat of DATA[mat].categories){ const it=cat.items.find(i=>i.id===id); if(it){label=it.l;break;} }
-        if(label===id && _customCompsCache){ const c=_customCompsCache.find(c=>c.id===id); if(c) label=c.label; }
+        if(label===id){ const c=customCompsLoaded.find(c=>c.id===id); if(c) label=c.label; }
         return label;
       });
       sub.textContent='🎯 '+names.join(' · ');
