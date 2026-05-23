@@ -1475,6 +1475,13 @@ let S = { user:null, mat:null, cat:null, classe:null, temp:{} };
 const SB_URL = 'https://ozxmvetlekgrqvwfhwua.supabase.co';
 const SB_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im96eG12ZXRsZWtncnF2d2Zod3VhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzgxODYxMDIsImV4cCI6MjA5Mzc2MjEwMn0.OR0Bnu9DUnYz1_m6BGNFjJ_laJzXD-b5qpqZdjfAZ0I';
 
+// Fallback — cacher l'écran de chargement après 3 secondes max
+function hideLoadingScreen(){
+  const ls = document.getElementById('loading-screen');
+  if(ls){ ls.classList.add('hide'); setTimeout(()=>{ if(ls && ls.parentNode) ls.remove(); }, 400); }
+}
+setTimeout(hideLoadingScreen, 3000);
+
 async function sbFetch(path, opts={}){
   const headers = {
     'apikey': SB_KEY,
@@ -2001,9 +2008,10 @@ function logout(){
   localStorage.removeItem('session');
   document.getElementById('bnav').style.display='none';
   goTo('sc-login');
+  hideLoadingScreen();
   // Cacher l'écran de chargement
   const ls = document.getElementById('loading-screen');
-  if(ls){ ls.classList.add('hide'); setTimeout(()=>ls.remove(), 400); }
+  if(ls){ ls.classList.add('hide'); setTimeout(()=>{ if(ls && ls.parentNode) ls.remove(); }, 400); }
 }
 
 // ════════════════════════════════════════
