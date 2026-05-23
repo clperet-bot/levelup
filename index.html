@@ -2742,23 +2742,25 @@ function renderActivitesSuggestions(){
   });
 }
 
-function renderActCompsCheck(){
+async function renderActCompsCheck(){
   const mat = document.getElementById('proj-mat-input')?.value || 'fr';
   const cont = document.getElementById('act-comps-check');
   if(!cont) return;
   cont.innerHTML='';
   const itemIds = _projSelectedIds || [];
   if(!itemIds.length){ cont.innerHTML='<div style="font-size:.78rem;color:var(--muted);font-weight:600">Sélectionne d\'abord des compétences dans le projet.</div>'; return; }
-  itemIds.forEach(id=>{
+  const customComps = await getCustomComps();
+  for(const id of itemIds){
     let label=id;
     for(const cat of DATA[mat].categories){ const it=cat.items.find(i=>i.id===id); if(it){label=it.l;break;} }
+    if(label===id){ const c=customComps.find(c=>c.id===id); if(c) label=c.label; }
     const row=document.createElement('div');
-    row.style.cssText='display:flex;align-items:center;gap:8px;';
+    row.style.cssText='display:flex;align-items:center;gap:8px;padding:4px 0;';
     const cb=document.createElement('input'); cb.type='checkbox'; cb.id='act-comp-'+id; cb.style.cssText='width:15px;height:15px;accent-color:var(--blue);';
     const lbl=document.createElement('label'); lbl.htmlFor='act-comp-'+id; lbl.style.cssText='font-size:.78rem;font-weight:600;cursor:pointer;'; lbl.textContent=label;
     row.appendChild(cb); row.appendChild(lbl);
     cont.appendChild(row);
-  });
+  }
 }
 
 function ajouterActivite(){
