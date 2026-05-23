@@ -1235,7 +1235,6 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);font
         <div style="font-size:.68rem;color:#92400e;margin-top:5px;font-weight:600">💡 Cette compétence sera sauvegardée et réutilisable dans vos prochains projets.</div>
       </div>
     </div>
-    <button class="btn-p" onclick="sauvegarderProjet()">💾 Enregistrer le projet</button>
     <button style="width:100%;margin-top:8px;padding:12px;background:#fff;border:2px solid #fddcca;border-radius:14px;font-family:'Nunito',sans-serif;font-weight:800;font-size:.88rem;cursor:pointer;color:#c2410c;" onclick="choisirTemplate()">📋 Partir d'un projet existant</button>
     <div id="template-list" style="display:none;margin-top:10px;"></div>
     <div id="creer-proj-msg" style="margin-top:10px;font-size:.85rem;font-weight:600;text-align:center"></div>
@@ -1262,6 +1261,11 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);font
       <!-- Liste des activités ajoutées -->
       <div id="activites-list"></div>
     </div>
+  </div>
+
+  <!-- BOUTON ENREGISTRER EN BAS -->
+  <div style="padding:0 16px 20px;">
+    <button class="btn-p" onclick="sauvegarderProjet()">💾 Enregistrer le projet</button>
   </div>
   <div style="height:80px"></div>
 </div>
@@ -2745,25 +2749,40 @@ function renderActivitesSuggestions(){
   });
 }
 
-async function renderActCompsCheck(){
+function renderActCompsCheck(){
   const mat = document.getElementById('proj-mat-input')?.value || 'fr';
   const cont = document.getElementById('act-comps-check');
   if(!cont) return;
   cont.innerHTML='';
   const itemIds = _projSelectedIds || [];
-  if(!itemIds.length){ cont.innerHTML='<div style="font-size:.78rem;color:var(--muted);font-weight:600">Sélectionne d\'abord des compétences dans le projet.</div>'; return; }
-  const customComps = await getCustomComps();
-  for(const id of itemIds){
-    let label=id;
-    for(const cat of DATA[mat].categories){ const it=cat.items.find(i=>i.id===id); if(it){label=it.l;break;} }
-    if(label===id){ const c=customComps.find(c=>c.id===id); if(c) label=c.label; }
-    const row=document.createElement('div');
-    row.style.cssText='display:flex;align-items:center;gap:8px;padding:4px 0;';
-    const cb=document.createElement('input'); cb.type='checkbox'; cb.id='act-comp-'+id; cb.style.cssText='width:15px;height:15px;accent-color:var(--blue);';
-    const lbl=document.createElement('label'); lbl.htmlFor='act-comp-'+id; lbl.style.cssText='font-size:.78rem;font-weight:600;cursor:pointer;'; lbl.textContent=label;
+  if(!itemIds.length){
+    cont.innerHTML='<div style="font-size:.75rem;color:var(--muted);font-style:italic;">Sélectionne d\'abord des compétences dans le projet ci-dessus.</div>';
+    return;
+  }
+  itemIds.forEach(id=>{
+    let label = id;
+    // Chercher dans DATA
+    for(const cat of DATA[mat].categories){
+      const it = cat.items.find(i=>i.id===id);
+      if(it){ label=it.l; break; }
+    }
+    // Chercher dans le cache custom comps
+    if(label===id && _customCompsCache){
+      const c = _customCompsCache.find(c=>c.id===id);
+      if(c) label = c.label;
+    }
+    const row = document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:8px;padding:5px 0;border-bottom:1px solid #f0f4ff;';
+    const cb = document.createElement('input');
+    cb.type='checkbox'; cb.id='act-comp-'+id;
+    cb.style.cssText='width:16px;height:16px;accent-color:#0369a1;flex-shrink:0;cursor:pointer;';
+    const lbl = document.createElement('label');
+    lbl.htmlFor='act-comp-'+id;
+    lbl.style.cssText='font-size:.8rem;font-weight:600;cursor:pointer;color:#1e3a5f;';
+    lbl.textContent=label;
     row.appendChild(cb); row.appendChild(lbl);
     cont.appendChild(row);
-  }
+  });
 }
 
 function ajouterActivite(){
