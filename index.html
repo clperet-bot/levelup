@@ -6673,10 +6673,10 @@ async function openProjetEleve(proj){
   if(acts.length){
     acts.forEach(act=>{
       const actBlock = document.createElement('div');
-      actBlock.style.cssText='margin-bottom:16px;border-radius:16px;border:0.5px solid #bbf7d0;overflow:hidden;';
+      actBlock.style.cssText='margin-bottom:16px;border-radius:16px;border:0.5px solid #bbf7d0;';
 
       const actHeader = document.createElement('div');
-      actHeader.style.cssText='background:#dcfce7;padding:10px 16px;border-bottom:0.5px solid #bbf7d0;';
+      actHeader.style.cssText='background:#dcfce7;padding:10px 16px 14px;border-bottom:0.5px solid #bbf7d0;border-radius:16px 16px 0 0;';
 
       const actTitleDiv = document.createElement('div');
       actTitleDiv.innerHTML='<div style="font-size:.62rem;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.6px;margin-bottom:2px;">Activité</div>'
