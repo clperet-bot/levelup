@@ -6184,10 +6184,9 @@ function toggleProjComp(id, label, isCustom){
     _projSelectedIds.push(id);
   }
   renderProjSelectedChips();
-  renderActCompsCheck(); // async mais pas besoin d'attendre
-  // Mettre à jour le dropdown si visible
-  const q = document.getElementById('proj-comp-search').value.trim().toLowerCase();
-  showProjDropdown(q);
+  renderActCompsCheck();
+  hideProjDropdown();
+  document.getElementById('proj-comp-search').value = '';
 }
 
 async function renderProjSelectedChips(){
@@ -6524,49 +6523,46 @@ async function openProjetEleve(proj){
   goTo('sc-projet');
   const list = document.getElementById('proj-items-list');
   list.innerHTML = '<div class="empty"><div style="font-size:1.5rem">⏳</div></div>';
-  // Charger les scores existants pour pré-remplir
+
+  // Charger les scores existants
   const scores = await getScores(S.user.id, proj.mat);
   const hist = scoresToHist(scores);
-  // Ne conserver que les scores POSTÉRIEURS à la création du projet
   const projCreatedAt = proj.createdAt || proj.created_at || '1970-01-01';
   const histFiltered = {};
   Object.entries(hist).forEach(([id, entries])=>{
     const recent = entries.filter(e=> !e.date || e.date >= projCreatedAt);
     if(recent.length) histFiltered[id] = recent;
   });
-  list.innerHTML = '';
-  const COLS={0:'#e2e8f0',1:'#d4edda',2:'#90ee90',3:'#228b22',4:'#0b5f0b'};
-  const FG={0:'#475569',1:'#166534',2:'#14532d',3:'#fff',4:'#fff'};
-  for(const itemId of proj.itemIds){
-    // Trouver le label — inclure les catégories personnalisées
+
+  // Charger les labels des compétences
+  const customComps = await getCustomComps();
+  function getLabel(itemId, mat){
     let label = itemId;
-    for(const cat of DATA[proj.mat].categories){
+    for(const cat of DATA[mat].categories){
       const it = cat.items.find(i=>i.id===itemId);
       if(it){ label=it.l; break; }
     }
-    if(label===itemId){
-      const customs=await getCustomComps();
-      const c=customs.find(c=>c.id===itemId);
-      if(c) label=c.label;
-    }
-    _projTemp[itemId] = null;
-    // Cercle pré-rempli = DERNIÈRE éval depuis le projet (pas la meilleure)
-    const ih = histFiltered[itemId] || [];
-    const ihAll = hist[itemId] || [];
+    if(label===itemId){ const c=customComps.find(c=>c.id===itemId); if(c) label=c.label; }
+    return label;
+  }
+
+  list.innerHTML = '';
+  const COLS={0:'#e2e8f0',1:'#d4edda',2:'#90ee90',3:'#228b22',4:'#0b5f0b'};
+  const FG={0:'#475569',1:'#166534',2:'#14532d',3:'#fff',4:'#fff'};
+  const LABELS_SHORT = {0:'Pas encore',1:'Un peu',2:'Bien',3:'Très bien',4:'Excellent'};
+
+  function makeCompCard(itemId, ih, ihAll){
+    const label = getLabel(itemId, proj.mat);
     const lastFiltered = ih.length ? ih[ih.length-1].val : null;
     const lastAll = ihAll.length ? ihAll[ihAll.length-1].val : null;
     const lastVal = lastFiltered !== null ? lastFiltered : lastAll;
-    if(lastVal !== null) _projTemp[itemId] = lastVal;
-
-    const LABELS_SHORT = {0:'Pas encore',1:'Un peu',2:'Bien',3:'Très bien',4:'Excellent'};
+    _projTemp[itemId] = lastVal;
 
     const circles = [0,1,2,3,4].map(v=>`<button class="circle${_projTemp[itemId]===v?' s'+v:''}" data-id="${itemId}" data-v="${v}" onclick="setProjScore('${itemId}',${v})"></button>`).join('');
 
     let histHtml = '';
-    // Si ≥3 évals en Excellent → afficher seulement la dernière (compétence maîtrisée)
     const excellentCount = ih.filter(e=>e.val===4).length;
-    const isMastered = excellentCount >= 3;
-    if(isMastered){
+    if(excellentCount >= 3){
       const lastEntry = ih[ih.length-1];
       const dt = new Date(lastEntry.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'});
       histHtml='<div class="obs-hist" style="margin-top:6px"><span class="obs-chip" style="background:'+COLS[lastEntry.val]+';color:'+FG[lastEntry.val]+'">'+dt+' · '+LABELS_SHORT[lastEntry.val]+'</span> <span style="font-size:.65rem;color:#15803d;font-weight:800">✓ Maîtrisé</span></div>';
@@ -6585,15 +6581,70 @@ async function openProjetEleve(proj){
     card.className = 'proj-item-card';
     card.id = 'pcard-'+itemId;
     card.innerHTML = `<div class="item-lbl">${label}</div><div class="circles">${circles}</div>${histHtml}`;
-    list.appendChild(card);
+    return card;
   }
 
-  // ── Section compétences transversales (auto-évaluation) ──
+  // ── Affichage par activité ──
+  const acts = getActivitesProjet(proj.id);
+  const allItemIdsInActs = new Set(acts.flatMap(a=>a.compIds||[]));
+
+  if(acts.length){
+    // Afficher les activités avec leurs compétences
+    acts.forEach(act=>{
+      const actBlock = document.createElement('div');
+      actBlock.style.cssText='margin-bottom:16px;background:#f0f9ff;border-radius:16px;padding:14px;border:2px solid #bae6fd;';
+
+      const actTitle = document.createElement('div');
+      actTitle.style.cssText='font-weight:900;font-size:.95rem;color:#0369a1;margin-bottom:10px;display:flex;align-items:center;gap:8px;';
+      actTitle.innerHTML='📋 '+act.titre;
+      actBlock.appendChild(actTitle);
+
+      if(act.compIds && act.compIds.length){
+        act.compIds.forEach(itemId=>{
+          _projTemp[itemId] = null;
+          const ih = histFiltered[itemId] || [];
+          const ihAll = hist[itemId] || [];
+          actBlock.appendChild(makeCompCard(itemId, ih, ihAll));
+        });
+      } else {
+        const empty = document.createElement('div');
+        empty.style.cssText='font-size:.75rem;color:var(--muted);font-style:italic;';
+        empty.textContent='Aucune compétence associée à cette activité.';
+        actBlock.appendChild(empty);
+      }
+      list.appendChild(actBlock);
+    });
+
+    // Compétences du projet non rattachées à une activité
+    const orphans = proj.itemIds.filter(id=>!allItemIdsInActs.has(id));
+    if(orphans.length){
+      const sep = document.createElement('div');
+      sep.style.cssText='margin:16px 0 10px;display:flex;align-items:center;gap:10px;';
+      sep.innerHTML='<div style="flex:1;height:2px;background:linear-gradient(90deg,var(--border),transparent)"></div>'
+        +'<span style="font-size:.72rem;font-weight:800;color:var(--muted);white-space:nowrap;">Autres compétences</span>'
+        +'<div style="flex:1;height:2px;background:linear-gradient(270deg,var(--border),transparent)"></div>';
+      list.appendChild(sep);
+      orphans.forEach(itemId=>{
+        _projTemp[itemId] = null;
+        const ih = histFiltered[itemId] || [];
+        const ihAll = hist[itemId] || [];
+        list.appendChild(makeCompCard(itemId, ih, ihAll));
+      });
+    }
+  } else {
+    // Pas d'activités — afficher toutes les compétences directement
+    for(const itemId of proj.itemIds){
+      _projTemp[itemId] = null;
+      const ih = histFiltered[itemId] || [];
+      const ihAll = hist[itemId] || [];
+      list.appendChild(makeCompCard(itemId, ih, ihAll));
+    }
+  }
+
+  // ── Section compétences transversales ──
   const transCatIds = TRANSV_CAT_IDS[proj.mat] || [];
   const transCats = DATA[proj.mat].categories.filter(c => transCatIds.includes(c.id));
-
   if(transCats.length){
-    // Séparateur
     const sep = document.createElement('div');
     sep.style.cssText='margin:20px 0 12px;display:flex;align-items:center;gap:10px;';
     sep.innerHTML='<div style="flex:1;height:2px;background:linear-gradient(90deg,#e0e7ff,transparent)"></div>'
@@ -6602,9 +6653,8 @@ async function openProjetEleve(proj){
     list.appendChild(sep);
 
     transCats.forEach(cat => {
-      // En-tête catégorie
       const catHdr = document.createElement('div');
-      catHdr.style.cssText='font-size:.8rem;font-weight:800;color:#4338ca;margin:10px 0 6px;padding:7px 12px;background:#f0f4ff;border-radius:12px;display:flex;align-items:center;gap:6px;';
+      catHdr.style.cssText='font-size:.8rem;font-weight:800;color:#4338ca;margin:10px 0 6px;padding:7px 12px;background:#f0f4ff;border-radius:12px;';
       catHdr.innerHTML=cat.icon+' '+cat.label;
       list.appendChild(catHdr);
 
@@ -6668,8 +6718,6 @@ async function openProjetEleve(proj){
   cmtInput.id='proj-cmt-input';
   cmtInput.placeholder='Ou écris ce que tu veux ici…';
   cmtInput.style.cssText='width:100%;min-height:70px;border-radius:12px;border:1.5px solid var(--border);padding:10px 12px;font-family:\'Nunito\',sans-serif;font-size:.85rem;font-weight:600;resize:vertical;box-sizing:border-box;background:#fff;color:var(--text);margin-top:4px;';
-  if(existingCmt && existingCmt.texte) cmtInput.placeholder='Ou écris ce que tu veux ici…';
-  else cmtInput.placeholder='Ou écris ce que tu veux ici…';
 
   SUGGESTIONS.forEach(s=>{
     const chip=document.createElement('button');
@@ -6686,7 +6734,7 @@ async function openProjetEleve(proj){
   cmtSection.appendChild(cmtInput);
   list.appendChild(cmtSection);
 
-  // Activités du projet
+  // ── Activités à cocher (faites ou pas) ──
   await renderActivitesEleve(proj);
 }
 
