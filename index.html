@@ -6724,9 +6724,6 @@ async function openProjetEleve(proj){
   cmtSection.appendChild(suggestDiv);
   cmtSection.appendChild(cmtInput);
   list.appendChild(cmtSection);
-
-  // ── Activités à cocher (faites ou pas) ──
-  await renderActivitesEleve(proj);
 }
 
 function setProjScore(itemId, val){
