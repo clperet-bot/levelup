@@ -3096,6 +3096,7 @@ async function renderActivitesEleve(proj){
     lbl.textContent=a.titre;
     row.appendChild(lbl);
 
+    if(proj.mat==='en'){
     const modeLabel=document.createElement('div');
     modeLabel.style.cssText='font-size:.68rem;font-weight:700;color:var(--muted);margin-bottom:6px;';
     modeLabel.textContent="Comment as-tu fait cette activité ?";
@@ -3127,6 +3128,7 @@ async function renderActivitesEleve(proj){
       modeBtns.appendChild(btn);
     });
     row.appendChild(modeBtns);
+    } // fin if en
     cont.appendChild(row);
   });
 }
@@ -6913,7 +6915,8 @@ async function openProjetEleve(proj){
         +'<div style="font-size:.92rem;font-weight:700;color:#14532d;margin-bottom:10px;">'+act.titre+'</div>';
       actHeader.appendChild(actTitleDiv);
 
-      // Boutons oral/écrit/interaction
+      // Boutons oral/écrit/interaction (anglais uniquement)
+      if(proj.mat==='en'){
       const modeLabel=document.createElement('div');
       modeLabel.style.cssText='font-size:.68rem;font-weight:700;color:#15803d;margin-bottom:6px;';
       modeLabel.textContent='Comment as-tu fait cette activité ?';
@@ -6945,6 +6948,7 @@ async function openProjetEleve(proj){
         modeBtns.appendChild(btn);
       });
       actHeader.appendChild(modeBtns);
+      } // fin if en
       actBlock.appendChild(actHeader);
 
       const actBody = document.createElement('div');
