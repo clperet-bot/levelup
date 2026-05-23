@@ -1312,21 +1312,21 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);font
 <button id="pouls-btn" onclick="openPoulsClasse()" style="display:none;position:fixed;bottom:72px;right:16px;z-index:999;background:#fff;color:#7c3aed;border:2.5px solid #7c3aed;border-radius:50%;width:48px;height:48px;font-size:1.4rem;cursor:pointer;box-shadow:0 4px 16px rgba(124,58,237,.3);line-height:1;">💜</button>
 
 <!-- MODAL POULS DE CLASSE -->
-<div id="modal-pouls" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9998;align-items:flex-end;justify-content:center;padding:0;pointer-events:none;">
-  <div style="background:#fff;border-radius:24px 24px 0 0;padding:20px 16px;width:100%;max-width:600px;max-height:85vh;overflow-y:auto;position:relative;">
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
-      <div style="font-family:'Nunito',sans-serif;font-weight:900;font-size:1.05rem;color:#2d1a0e;">💜</div>
-      <button onclick="document.getElementById('modal-pouls').style.display='none'" style="background:#f5f5f5;border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:1rem;">✕</button>
-    </div>
-    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
-      <select id="pouls-mat" style="flex:1;padding:8px 12px;border:2px solid #e2e8f0;border-radius:10px;font-family:'Nunito',sans-serif;font-size:.88rem;outline:none;" onchange="chargerPoulsClasse()">
-        <option value="">— Matière —</option>
-        <option value="fr">🇫🇷 Français</option>
-        <option value="en">🇬🇧 Anglais</option>
-      </select>
-      <select id="pouls-classe" style="flex:1;padding:8px 12px;border:2px solid #e2e8f0;border-radius:10px;font-family:'Nunito',sans-serif;font-size:.88rem;outline:none;" onchange="chargerPoulsClasse()">
-        <option value="">— Classe —</option>
-      </select>
+<div id="modal-pouls" style="display:none;position:fixed;inset:0;background:rgba(124,58,237,0.15);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);z-index:9998;align-items:flex-end;justify-content:center;padding:16px;pointer-events:none;">
+  <div style="width:100%;max-width:600px;background:rgba(255,255,255,0.18);border:1px solid rgba(255,255,255,0.35);border-radius:20px 20px 16px 16px;padding:20px;box-shadow:0 0 40px rgba(167,139,250,0.4),0 0 80px rgba(167,139,250,0.15);max-height:80vh;overflow-y:auto;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:1.3rem;filter:drop-shadow(0 0 8px rgba(167,139,250,0.8));">💜</span>
+        <select id="pouls-mat" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);border-radius:8px;color:#3b0764;padding:5px 8px;font-size:.78rem;font-family:'Nunito',sans-serif;outline:none;" onchange="chargerPoulsClasse()">
+          <option value="">— Matière —</option>
+          <option value="fr">🇫🇷 Français</option>
+          <option value="en">🇬🇧 Anglais</option>
+        </select>
+        <select id="pouls-classe" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);border-radius:8px;color:#3b0764;padding:5px 8px;font-size:.78rem;font-family:'Nunito',sans-serif;outline:none;" onchange="chargerPoulsClasse()">
+          <option value="">— Classe —</option>
+        </select>
+      </div>
+      <button onclick="document.getElementById('modal-pouls').style.display='none';document.getElementById('modal-pouls').style.pointerEvents='none';" style="background:rgba(255,255,255,0.2);border:1px solid rgba(255,255,255,0.3);border-radius:50%;width:28px;height:28px;cursor:pointer;color:#3b0764;font-size:.9rem;">✕</button>
     </div>
     <div id="pouls-content" style="font-family:'Nunito',sans-serif;"></div>
   </div>
@@ -2062,7 +2062,7 @@ async function chargerPoulsClasse(){
     const humeur = humeurMap[elv.id];
     const cmt = cmtMap[elv.id];
     const row = document.createElement('div');
-    row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;margin-bottom:6px;background:'+(humeur?'#fff':'#f8fafc')+';border:1px solid '+(humeur?'#e2e8f0':'#f1f5f9')+';';
+    row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:10px;margin-bottom:6px;background:'+(humeur?'rgba(255,255,255,0.25)':'rgba(255,255,255,0.1)')+';border:1px solid '+(humeur?'rgba(255,255,255,0.3)':'rgba(255,255,255,0.15)')+';';
     const emoji = humeur || '—';
     const emojiDiv = document.createElement('div');
     emojiDiv.style.cssText='font-size:1.4rem;width:32px;text-align:center;flex-shrink:0;';
@@ -2070,10 +2070,10 @@ async function chargerPoulsClasse(){
     const infoDiv = document.createElement('div');
     infoDiv.style.cssText='flex:1;';
     const nameDiv = document.createElement('div');
-    nameDiv.style.cssText='font-size:.82rem;font-weight:700;color:#2d1a0e;';
+    nameDiv.style.cssText='font-size:.82rem;font-weight:700;color:'+(humeur?'#1e0a3c':'rgba(30,10,60,0.4)')+';';
     nameDiv.textContent = nomAff;
     infoDiv.appendChild(nameDiv);
-    if(cmt){ const cmtDiv=document.createElement('div'); cmtDiv.style.cssText='font-size:.72rem;color:#92614a;margin-top:2px;font-style:italic;'; cmtDiv.textContent=cmt; infoDiv.appendChild(cmtDiv); }
+    if(cmt){ const cmtDiv=document.createElement('div'); cmtDiv.style.cssText='font-size:.68rem;color:rgba(30,10,60,0.6);font-style:italic;text-align:right;'; cmtDiv.textContent=cmt; infoDiv.appendChild(cmtDiv); }
     row.appendChild(emojiDiv); row.appendChild(infoDiv);
     cont.appendChild(row);
   });
