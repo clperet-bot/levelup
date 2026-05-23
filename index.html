@@ -1252,6 +1252,7 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);font
       <div style="background:#f0f9ff;border-radius:14px;padding:14px;border:2px solid #bae6fd;">
         <div style="font-weight:800;font-size:.82rem;color:#0369a1;margin-bottom:10px">➕ Nouvelle activité</div>
         <input type="text" id="act-titre-input" placeholder="Ex: Exercice 1 — La phrase complexe"
+          oninput="renderActivitesSuggestions()"
           style="width:100%;padding:10px 14px;border:2px solid #bae6fd;border-radius:10px;font-family:'Nunito',sans-serif;font-size:.88rem;outline:none;box-sizing:border-box;margin-bottom:10px;">
         <div style="font-size:.75rem;font-weight:800;color:#0369a1;margin-bottom:6px;">Compétences associées :</div>
         <div id="act-comps-check" style="display:flex;flex-direction:column;gap:5px;max-height:180px;overflow-y:auto;margin-bottom:10px;"></div>
@@ -2716,8 +2717,12 @@ function renderActivitesSuggestions(){
   const bank = getActivitesBank();
   const mat = document.getElementById('proj-mat-input')?.value || 'fr';
   const sec = document.getElementById('activites-suggestions');
+  const titreInp = document.getElementById('act-titre-input');
   if(!sec) return;
-  const filtered = bank.filter(a=>!a.mat || a.mat===mat);
+  // N'afficher que si un titre est tapé
+  const titre = titreInp?.value?.trim() || '';
+  if(!titre){ sec.innerHTML=''; return; }
+  const filtered = bank.filter(a=>(!a.mat || a.mat===mat) && a.titre.toLowerCase().includes(titre.toLowerCase()));
   if(!filtered.length){ sec.innerHTML=''; return; }
   sec.innerHTML='<div style="font-weight:800;font-size:.8rem;color:var(--muted);margin-bottom:8px;">📚 Activités déjà créées — coche pour réutiliser :</div>';
   const selectedIds = new Set((window._projActIds||[]));
@@ -6048,6 +6053,10 @@ async function saveCustomComps(arr){
 }
 
 async function addCustomComp(mat, categorieId, label){
+  // Vérifier si cette compétence existe déjà
+  const existing = await getCustomComps();
+  const alreadyExists = existing.some(c => c.mat===mat && c.label.toLowerCase().trim()===label.toLowerCase().trim());
+  if(alreadyExists) return null;
   _customCompsCache = null;
   return await sbFetch('custom_comps', {
     method:'POST',
@@ -6233,7 +6242,7 @@ async function sauvegarderProjet(){
     _projetsCache = null;
     msg.style.color='var(--green)';
     msg.textContent='✅ Projet modifié !';
-    setTimeout(()=>{ goTo('sc-prof'); switchProfTab('adm'); }, 900);
+    setTimeout(()=>{ goTo('sc-prof'); switchProfTab('adm'); switchAdmTab('projets'); }, 900);
     return;
   }
 
@@ -6324,7 +6333,7 @@ async function sauvegarderProjet(){
   if(saveBtn){ saveBtn.disabled=false; saveBtn.textContent='💾 Enregistrer le projet'; }
   msg.style.color='var(--green)';
   msg.textContent='✅ Projet créé et démarré !';
-  setTimeout(()=>{ goTo('sc-prof'); switchProfTab('adm'); }, 900);
+  setTimeout(()=>{ goTo('sc-prof'); switchProfTab('adm'); switchAdmTab('projets'); }, 900);
 }
 
 // ── CÔTÉ ÉLÈVE : afficher la tuile projet + historique sur sc-mat ──
