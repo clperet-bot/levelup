@@ -6060,19 +6060,7 @@ async function openCreerProjet(){
 }
 
 async function loadCustomCompsIntoData(){
-  const customs = await getCustomComps();
-  ['fr','en'].forEach(mat=>{
-    // Supprimer l'ancienne catégorie custom si existante
-    const idx = DATA[mat].categories.findIndex(c=>c.id==='custom_cat_'+mat);
-    if(idx>=0) DATA[mat].categories.splice(idx,1);
-    DATA[mat]._customCat = null;
-    const matCustoms = customs.filter(c=>c.mat===mat);
-    if(matCustoms.length){
-      const cat = {id:'custom_cat_'+mat, icon:'✏️', label:'Compétences personnalisées', items:matCustoms.map(c=>({id:c.id,t:'s',l:c.label}))};
-      DATA[mat].categories.push(cat);
-      DATA[mat]._customCat = cat;
-    }
-  });
+  // Ne rien faire - les compétences custom viennent uniquement de Supabase via getAllProjCompetences
 }
 
 // ── Compétences personnalisées temporaires (pour la session / localStorage)
@@ -6218,18 +6206,18 @@ async function addCustomCompetence(){
   if(!label){ inp.style.borderColor='var(--red)'; return; }
   inp.style.borderColor='#fde68a';
   const mat = document.getElementById('proj-mat-input').value;
-  const id = 'custom_'+Date.now();
-  // Sauvegarder en Supabase
-  await addCustomComp(mat, 'custom_cat', label);
-  // Ajouter aux DATA temporairement
-  if(!DATA[mat]._customCat){
-    DATA[mat]._customCat = {id:'custom_cat', icon:'✏️', label:'Compétences personnalisées', items:[]};
-    DATA[mat].categories.push(DATA[mat]._customCat);
+  // Sauvegarder en Supabase et récupérer le vrai ID
+  const result = await addCustomComp(mat, 'custom_cat', label);
+  _customCompsCache = null; // Forcer rechargement
+  const newCustoms = await getCustomComps();
+  const newComp = newCustoms.find(c=>c.mat===mat && c.label===label);
+  const realId = newComp?.id || 'custom_'+Date.now();
+  // Sélectionner automatiquement avec le vrai ID
+  if(!_projSelectedIds.includes(realId)){
+    _projSelectedIds.push(realId);
   }
-  DATA[mat]._customCat.items.push({id, t:'s', l:label});
-  // Sélectionner automatiquement
-  _projSelectedIds.push(id);
   renderProjSelectedChips();
+  renderActCompsCheck();
   inp.value = '';
   const btn = inp.nextElementSibling;
   const orig = btn.textContent;
