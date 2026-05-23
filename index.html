@@ -1312,7 +1312,7 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);font
 <button id="pouls-btn" onclick="openPoulsClasse()" style="display:none;position:fixed;bottom:72px;right:16px;z-index:999;background:#fff;color:#7c3aed;border:2.5px solid #7c3aed;border-radius:50%;width:48px;height:48px;font-size:1.4rem;cursor:pointer;box-shadow:0 4px 16px rgba(124,58,237,.3);line-height:1;">💜</button>
 
 <!-- MODAL POULS DE CLASSE -->
-<div id="modal-pouls" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9998;align-items:flex-end;justify-content:center;padding:0;">
+<div id="modal-pouls" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9998;align-items:flex-end;justify-content:center;padding:0;pointer-events:none;">
   <div style="background:#fff;border-radius:24px 24px 0 0;padding:20px 16px;width:100%;max-width:600px;max-height:85vh;overflow-y:auto;position:relative;">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
       <div style="font-family:'Nunito',sans-serif;font-weight:900;font-size:1.05rem;color:#2d1a0e;">💜</div>
@@ -2006,6 +2006,7 @@ function renderProfBadges(){
 async function openPoulsClasse(){
   const modal = document.getElementById('modal-pouls');
   modal.style.display = 'flex';
+  modal.style.pointerEvents = 'auto';
   // Pré-remplir la matière si déjà sélectionnée
   const matSel = document.getElementById('pouls-mat');
   if(S.mat) matSel.value = S.mat;
@@ -2029,8 +2030,10 @@ async function chargerPoulsClasse(){
   // Charger les élèves de la classe
   const eleves = await sbFetch('eleves?code_classe=eq.'+classeCode+'&select=id,nom&order=nom.asc') || [];
 
-  // Charger la dernière humeur de chaque élève pour cette matière
-  const humeurs = await sbFetch('humeurs?matiere=eq.'+mat+'&select=eleve_id,emoji&order=updated_at.desc') || [];
+  // Charger les humeurs du jour (fuseau Paris)
+  const now = new Date();
+  const parisMidnight = new Date(now.toLocaleDateString('fr-FR', {timeZone:'Europe/Paris'}).split('/').reverse().join('-')+'T00:00:00+02:00').toISOString();
+  const humeurs = await sbFetch('humeurs?matiere=eq.'+mat+'&updated_at=gte.'+parisMidnight+'&select=eleve_id,emoji&order=updated_at.desc') || [];
   const humeurMap = {};
   humeurs.forEach(h=>{ if(!humeurMap[h.eleve_id]) humeurMap[h.eleve_id] = h.emoji; });
 
