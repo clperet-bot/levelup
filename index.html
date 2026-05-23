@@ -363,7 +363,6 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);font
 .transv-score-chip{border-radius:8px;padding:3px 8px;font-size:.7rem;font-weight:800;}
 .prog-info{background:var(--orange-pale);color:#c2410c;border-radius:12px;padding:8px 12px;font-size:.8rem;font-weight:700;margin-top:8px;border:1.5px solid var(--border);}
 </style>
-<style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent;}
 body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);font-size:15px;overflow:hidden;height:100vh;}
 
@@ -2795,23 +2794,70 @@ async function saveItems(){
 // ════════════════════════════════════════
 // ACTIVITÉS
 // ════════════════════════════════════════
-// Stockage : localStorage 'activites_bank' = [{id, titre, mat}]
-// Projet stocke : proj.activites = [{id, titre, compIds:[...]}]
+// Stockage : Supabase tables 'activites_bank' et 'activites_projets'
+// (migration depuis localStorage — synchronisé sur tous les appareils)
 
-function getActivitesBank(){
-  try{ return JSON.parse(localStorage.getItem('activites_bank')||'[]'); }catch(e){return [];}
-}
-function saveActivitesBank(bank){ localStorage.setItem('activites_bank', JSON.stringify(bank)); }
+// Cache en mémoire pour éviter les requêtes répétées
+let _activitesBankCache = null;
+let _activitesProjCache = {}; // { projId: [...] }
 
-function getActivitesProjet(projId){
-  try{ return JSON.parse(localStorage.getItem('activites_proj_'+projId)||'[]'); }catch(e){return [];}
+async function getActivitesBank(){
+  if(_activitesBankCache !== null) return _activitesBankCache;
+  try{
+    const rows = await sbFetch('activites_bank?select=id,titre,mat&order=created_at.asc') || [];
+    _activitesBankCache = rows;
+    return rows;
+  }catch(e){ return []; }
 }
-function saveActivitesProjet(projId, acts){ localStorage.setItem('activites_proj_'+projId, JSON.stringify(acts)); }
 
-function getActivitesEleve(eleveId, projId){
-  try{ return JSON.parse(localStorage.getItem('act_done_'+eleveId+'_'+projId)||'{}'); }catch(e){return {};}
+async function saveActivitesBank(bank){
+  // Non utilisé directement — on passe par addActiviteBank
+  _activitesBankCache = bank;
 }
-function saveActivitesEleve(eleveId, projId, done){ localStorage.setItem('act_done_'+eleveId+'_'+projId, JSON.stringify(done)); }
+
+async function addActiviteBank(act){
+  // act = { id, titre, mat }
+  _activitesBankCache = null;
+  try{
+    await sbFetch('activites_bank', {method:'POST', prefer:'return=minimal', body:{id:act.id, titre:act.titre, mat:act.mat}});
+  }catch(e){ console.warn('addActiviteBank error', e); }
+}
+
+async function getActivitesProjet(projId){
+  if(_activitesProjCache[projId] !== undefined) return _activitesProjCache[projId];
+  try{
+    const rows = await sbFetch('activites_projets?proj_id=eq.'+projId+'&select=id,act_id,titre,comp_ids&order=created_at.asc') || [];
+    const acts = rows.map(r=>({ id:r.act_id, act_id:r.act_id, titre:r.titre, compIds:r.comp_ids||[] }));
+    _activitesProjCache[projId] = acts;
+    return acts;
+  }catch(e){ return []; }
+}
+
+async function saveActivitesProjet(projId, acts){
+  _activitesProjCache[projId] = null;
+  try{
+    // Supprimer les anciennes entrées pour ce projet
+    await sbFetch('activites_projets?proj_id=eq.'+projId, {method:'DELETE', prefer:'return=minimal'});
+    // Réinsérer toutes les activités
+    if(acts && acts.length){
+      for(const a of acts){
+        await sbFetch('activites_projets', {method:'POST', prefer:'return=minimal', body:{
+          proj_id: projId,
+          act_id: a.id || a.act_id,
+          titre: a.titre,
+          comp_ids: a.compIds || []
+        }});
+      }
+    }
+    _activitesProjCache[projId] = acts;
+  }catch(e){ console.warn('saveActivitesProjet error', e); }
+}
+
+// Compatibilité : getActivitesEleve/saveActivitesEleve sont désormais des alias DB
+async function getActivitesEleve(eleveId, projId){
+  return await getActivitesDoneDB(eleveId, projId);
+}
+async function saveActivitesEleve(eleveId, projId, done){ /* géré via toggleActiviteDoneDB */ }
 
 // Rendre le supabase call pour les activités élève (persistant en DB)
 async function getActivitesDoneDB(eleveId, projId){
@@ -2848,8 +2894,8 @@ async function deleteActMode(eleveId, projId, actId){
 }
 
 // ── Création de projet : afficher les suggestions + checkboxes compétences ──
-function renderActivitesSuggestions(){
-  const bank = getActivitesBank();
+async function renderActivitesSuggestions(){
+  const bank = await getActivitesBank();
   const mat = document.getElementById('proj-mat-input')?.value || 'fr';
   const sec = document.getElementById('activites-suggestions');
   const titreInp = document.getElementById('act-titre-input');
@@ -2914,16 +2960,14 @@ async function renderActCompsCheck(){
   });
 }
 
-function ajouterActivite(){
+async function ajouterActivite(){
   const titre=document.getElementById('act-titre-input').value.trim();
   if(!titre){ alert('Entre un titre pour l\'activité.'); return; }
   const mat=document.getElementById('proj-mat-input')?.value||'fr';
   const compIds=[...document.querySelectorAll('#act-comps-check input:checked')].map(cb=>cb.id.replace('act-comp-',''));
   const id='act_'+Date.now();
-  // Sauvegarder dans la banque
-  const bank=getActivitesBank();
-  bank.push({id, titre, mat});
-  saveActivitesBank(bank);
+  // Sauvegarder dans la banque (Supabase)
+  await addActiviteBank({id, titre, mat});
   // Ajouter aux activités du projet en cours (stocké temporairement)
   if(!window._projActivites) window._projActivites=[];
   window._projActivites.push({id, titre, compIds});
@@ -2974,7 +3018,7 @@ async function renderActivitesProjetList(){
 async function renderActivitesEleve(proj){
   const cont=document.getElementById('proj-activites-section');
   if(!cont||!proj) return;
-  const acts=getActivitesProjet(proj.id);
+  const acts=await getActivitesProjet(proj.id);
   if(!acts.length){ cont.innerHTML=''; return; }
 
   const allModes = await getActModes(S.user.id);
@@ -3054,7 +3098,7 @@ async function renderActivitesEleve(proj){
 // ── Côté prof : afficher activités faites par un élève ──
 async function renderActivitesConsult(cont, eleveId, proj){
   if(!proj) return;
-  const acts=getActivitesProjet(proj.id);
+  const acts=await getActivitesProjet(proj.id);
 
   const sep=document.createElement('div');
   sep.style.cssText='margin:14px 0 8px;font-weight:800;font-size:.8rem;color:#15803d;';
@@ -3750,7 +3794,7 @@ async function _renderConsultEleve(cont, eleveId, nom, code, reopenId){
   const compModeMap = {}; // itemId → mode
   const projets = await getProjets();
   for(const proj of projets){
-    const acts = getActivitesProjet(proj.id);
+    const acts = await getActivitesProjet(proj.id);
     const projModes = allActModes.filter(m=>m.proj_id===proj.id);
     for(const act of acts){
       const actKey = act.act_id||act.id;
@@ -6242,7 +6286,7 @@ async function modifierProjet(projId){
   loadCustomCompsIntoData();
   _projSelectedIds = [...(proj.itemIds||[])];
   // Charger les activités existantes
-  window._projActivites = getActivitesProjet(projId);
+  window._projActivites = await getActivitesProjet(projId);
   window._projActIds = [];
   // Charger les classes
   const classes = await getClasses();
@@ -6571,14 +6615,14 @@ async function sauvegarderProjet(){
   // Sauvegarder les activités du projet
   const allActs = [...(window._projActivites||[])];
   // Ajouter les activités depuis les suggestions cochées
-  const bank=getActivitesBank();
+  const bank=await getActivitesBank();
   (window._projActIds||[]).forEach(id=>{
     if(!allActs.find(a=>a.id===id)){
       const ba=bank.find(b=>b.id===id);
       if(ba) allActs.push({id:ba.id, titre:ba.titre, compIds:[]});
     }
   });
-  if(allActs.length) saveActivitesProjet(newProjId, allActs);
+  if(allActs.length) await saveActivitesProjet(newProjId, allActs);
   incrementProfStat('projets'); // Tracker la création de projet
   _rewardsCache = null;
 
@@ -6796,7 +6840,7 @@ async function openProjetEleve(proj){
   }
 
   // ── Affichage par activité ──
-  const acts = getActivitesProjet(proj.id);
+  const acts = await getActivitesProjet(proj.id);
   const allItemIdsInActs = new Set(acts.flatMap(a=>a.compIds||[]));
 
   // Charger les modes
