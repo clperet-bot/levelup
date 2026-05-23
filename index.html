@@ -1218,7 +1218,7 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);font
       <div style="position:relative;margin-bottom:10px">
         <input type="text" id="proj-comp-search" placeholder="🔍 Cherche une compétence..." autocomplete="off"
           style="width:100%;padding:10px 14px;border:2px solid var(--border);border-radius:12px;font-family:'Nunito',sans-serif;font-size:.9rem;outline:none"
-          oninput="filterProjCompetences()" onfocus="showProjDropdown()" onblur="setTimeout(hideProjDropdown,200)">
+          oninput="filterProjCompetences()" onfocus="showProjDropdown()" onblur="setTimeout(hideProjDropdown,50)">
         <div id="proj-comp-dropdown" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:100;background:#fff;border:2px solid var(--border);border-radius:12px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12);margin-top:4px"></div>
       </div>
       <!-- Compétences sélectionnées (chips) -->
@@ -6021,6 +6021,9 @@ async function modifierProjet(projId){
   document.getElementById('proj-comp-search').value = '';
   loadCustomCompsIntoData();
   _projSelectedIds = [...(proj.itemIds||[])];
+  // Charger les activités existantes
+  window._projActivites = getActivitesProjet(projId);
+  window._projActIds = [];
   // Charger les classes
   const classes = await getClasses();
   const sel = document.getElementById('proj-cls-input');
@@ -6028,9 +6031,10 @@ async function modifierProjet(projId){
     ? classes.map(c=>`<option value="${c.code}"${c.code===proj.classe?' selected':''}>${c.code}</option>`).join('')
     : '<option value="">Aucune classe</option>';
   refreshProjCompetences();
-  // Restaurer la sélection sans réinitialiser
   _projSelectedIds = [...(proj.itemIds||[])];
   renderProjSelectedChips();
+  renderActCompsCheck();
+  renderActivitesProjetList();
   goTo('sc-creer-projet');
 }
 
