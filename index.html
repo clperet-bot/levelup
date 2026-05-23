@@ -1218,7 +1218,7 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);font
       <div style="position:relative;margin-bottom:10px">
         <input type="text" id="proj-comp-search" placeholder="🔍 Cherche une compétence..." autocomplete="off"
           style="width:100%;padding:10px 14px;border:2px solid var(--border);border-radius:12px;font-family:'Nunito',sans-serif;font-size:.9rem;outline:none"
-          oninput="filterProjCompetences()" onfocus="showProjDropdown()" onblur="setTimeout(hideProjDropdown,50)">
+          oninput="filterProjCompetences()" onfocus="showProjDropdown()" onblur="setTimeout(hideProjDropdown,150)">
         <div id="proj-comp-dropdown" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:100;background:#fff;border:2px solid var(--border);border-radius:12px;max-height:220px;overflow-y:auto;box-shadow:0 8px 24px rgba(0,0,0,.12);margin-top:4px"></div>
       </div>
       <!-- Compétences sélectionnées (chips) -->
@@ -6118,14 +6118,15 @@ function refreshProjCompetences(){
 }
 
 async function getAllProjCompetences(mat){
-  // Compétences standard
+  // Compétences standard (exclure les catégories custom injectées dans DATA)
   const items = [];
   DATA[mat].categories.forEach(cat=>{
+    if(cat.id === 'custom_cat_'+mat || cat.id === 'custom_cat') return; // skip custom
     cat.items.forEach(it=>{
       items.push({id:it.id, label:it.l, cat:cat.label, custom:false});
     });
   });
-  // Compétences personnalisées
+  // Compétences personnalisées depuis Supabase uniquement
   const customs = (await getCustomComps()).filter(c=>c.mat===mat);
   customs.forEach(c=>{
     items.push({id:c.id, label:c.label, cat:'✏️ Personnalisées', custom:true});
@@ -6183,10 +6184,12 @@ function toggleProjComp(id, label, isCustom){
   } else {
     _projSelectedIds.push(id);
   }
+  // Fermer le dropdown immédiatement
+  hideProjDropdown();
+  const searchInput = document.getElementById('proj-comp-search');
+  if(searchInput){ searchInput.value = ''; searchInput.blur(); }
   renderProjSelectedChips();
   renderActCompsCheck();
-  hideProjDropdown();
-  document.getElementById('proj-comp-search').value = '';
 }
 
 async function renderProjSelectedChips(){
