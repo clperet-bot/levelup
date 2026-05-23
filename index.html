@@ -2029,11 +2029,10 @@ async function chargerPoulsClasse(){
   // Charger les élèves de la classe
   const eleves = await sbFetch('eleves?code_classe=eq.'+classeCode+'&select=id,nom&order=nom.asc') || [];
 
-  // Charger les humeurs du jour
-  const today = new Date().toISOString().slice(0,10);
-  const humeurs = await sbFetch('humeurs?updated_at=gte.'+today+'T00:00:00&select=eleve_id,emoji,matiere,updated_at') || [];
+  // Charger la dernière humeur de chaque élève pour cette matière
+  const humeurs = await sbFetch('humeurs?matiere=eq.'+mat+'&select=eleve_id,emoji&order=updated_at.desc') || [];
   const humeurMap = {};
-  humeurs.filter(h=>h.matiere===mat).forEach(h=>{ humeurMap[h.eleve_id] = h.emoji; });
+  humeurs.forEach(h=>{ if(!humeurMap[h.eleve_id]) humeurMap[h.eleve_id] = h.emoji; });
 
   // Charger le projet actif pour cette matière et classe
   const projActif = await getProjetActif(mat, classeCode);
@@ -2059,9 +2058,8 @@ async function chargerPoulsClasse(){
     const humeur = humeurMap[elv.id];
     const cmt = cmtMap[elv.id];
     const row = document.createElement('div');
-    row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;margin-bottom:6px;background:'+(humeur!==undefined?'#fff':'#f8fafc')+';border:1px solid '+(humeur!==undefined?'#e2e8f0':'#f1f5f9')+';';
-    const emoji = humeur ? humeur : '—';
-    row.innerHTML='<div style="font-size:1.4rem;width:32px;text-align:center;flex-shrink:0;">'+emoji+'</div>'
+    row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;margin-bottom:6px;background:'+(humeur?'#fff':'#f8fafc')+';border:1px solid '+(humeur?'#e2e8f0':'#f1f5f9')+';';
+    const emoji = humeur || '—';
       +'<div style="flex:1;">'
       +'<div style="font-size:.82rem;font-weight:700;color:#2d1a0e;">'+nomAff+'</div>'
       +(cmt?'<div style="font-size:.72rem;color:#92614a;margin-top:2px;font-style:italic;">'+cmt+'</div>':'')
