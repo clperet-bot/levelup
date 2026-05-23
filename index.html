@@ -2808,6 +2808,7 @@ function renderActivitesProjetList(){
   const cont=document.getElementById('activites-list');
   if(!cont) return;
   const acts=window._projActivites||[];
+  const mat=document.getElementById('proj-mat-input')?.value||'fr';
   cont.innerHTML='';
   if(!acts.length){ cont.innerHTML='<div style="font-size:.78rem;color:var(--muted);font-weight:600;text-align:center;padding:8px;">Aucune activité ajoutée.</div>'; return; }
   const title=document.createElement('div');
@@ -2816,14 +2817,23 @@ function renderActivitesProjetList(){
   cont.appendChild(title);
   acts.forEach((a,i)=>{
     const row=document.createElement('div');
-    row.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 12px;background:#fff;border-radius:10px;border:1.5px solid #e2e8f0;margin-bottom:6px;';
-    const lbl=document.createElement('div'); lbl.style.cssText='flex:1;font-size:.82rem;font-weight:700;'; lbl.textContent=a.titre;
+    row.style.cssText='display:flex;align-items:flex-start;gap:8px;padding:8px 12px;background:#fff;border-radius:10px;border:1.5px solid #e2e8f0;margin-bottom:6px;';
+    const lbl=document.createElement('div'); lbl.style.cssText='flex:1;font-size:.82rem;font-weight:700;';
+    lbl.textContent=a.titre;
     if(a.compIds&&a.compIds.length){
-      const sub=document.createElement('div'); sub.style.cssText='font-size:.65rem;color:var(--muted);font-weight:600;margin-top:2px;'; sub.textContent=a.compIds.length+' compétence'+(a.compIds.length>1?'s':'');
+      const sub=document.createElement('div'); sub.style.cssText='font-size:.68rem;color:#0369a1;font-weight:600;margin-top:3px;';
+      // Afficher les noms des compétences
+      const names=a.compIds.map(id=>{
+        let label=id;
+        for(const cat of DATA[mat].categories){ const it=cat.items.find(i=>i.id===id); if(it){label=it.l;break;} }
+        if(label===id && _customCompsCache){ const c=_customCompsCache.find(c=>c.id===id); if(c) label=c.label; }
+        return label;
+      });
+      sub.textContent='🎯 '+names.join(' · ');
       lbl.appendChild(sub);
     }
     const del=document.createElement('button');
-    del.style.cssText='background:#fef2f2;border:1px solid #fca5a5;color:var(--red);padding:4px 8px;border-radius:8px;font-size:.75rem;cursor:pointer;font-family:Nunito,sans-serif;';
+    del.style.cssText='background:#fef2f2;border:1px solid #fca5a5;color:var(--red);padding:4px 8px;border-radius:8px;font-size:.75rem;cursor:pointer;font-family:Nunito,sans-serif;flex-shrink:0;';
     del.textContent='✕'; del.onclick=()=>{ window._projActivites.splice(i,1); renderActivitesProjetList(); };
     row.appendChild(lbl); row.appendChild(del);
     cont.appendChild(row);
@@ -6338,8 +6348,12 @@ async function sauvegarderProjet(){
     await updateProjetDB(p.id, {actif:false});
   }
   _projetsCache = null;
-  const result = await addProjetDB({titre, mat, classe, itemIds, actif:true});
-  const newProjId = result?.[0]?.id || 'proj_'+Date.now();
+  await addProjetDB({titre, mat, classe, itemIds, actif:true});
+  // Récupérer l'UUID réel depuis Supabase
+  _projetsCache = null;
+  const allProjets2 = await getProjets();
+  const newProj = allProjets2.find(p=>p.titre===titre && p.mat===mat && p.classe===classe && p.actif);
+  const newProjId = newProj?.id || 'proj_'+Date.now();
   // Sauvegarder les activités du projet
   const allActs = [...(window._projActivites||[])];
   // Ajouter les activités depuis les suggestions cochées
@@ -6666,20 +6680,6 @@ async function openProjetEleve(proj){
   });
   cmtSection.appendChild(suggestDiv);
   cmtSection.appendChild(cmtInput);
-
-  const cmtBtn=document.createElement('button');
-  cmtBtn.style.cssText='margin-top:10px;padding:9px 18px;background:var(--blue);color:#fff;border:none;border-radius:10px;font-family:\'Nunito\',sans-serif;font-weight:800;font-size:.82rem;cursor:pointer;';
-  cmtBtn.textContent='💾 Enregistrer mon commentaire';
-  cmtBtn.onclick=async()=>{
-    const txt=cmtInput.value.trim();
-    if(!txt){ cmtInput.style.borderColor='var(--red)'; return; }
-    cmtInput.style.borderColor='var(--border)';
-    cmtBtn.textContent='⏳...'; cmtBtn.disabled=true;
-    await upsertCommentaire(S.user.id, proj.mat, 'projet_'+proj.id, txt);
-    cmtBtn.textContent='✅ Commentaire enregistré !';
-    setTimeout(()=>{ cmtBtn.textContent='💾 Enregistrer mon commentaire'; cmtBtn.disabled=false; }, 1800);
-  };
-  cmtSection.appendChild(cmtBtn);
   list.appendChild(cmtSection);
 
   // Activités du projet
@@ -6703,6 +6703,11 @@ async function saveProjItems(){
     const promises = Object.entries(_projTemp)
       .filter(([id,val])=>val!==null)
       .map(([id,val])=>addScore(S.user.id, _projActuel.mat, id, val));
+    // Sauvegarder le commentaire si rempli
+    const cmtInput = document.getElementById('proj-cmt-input');
+    if(cmtInput && cmtInput.value.trim()){
+      promises.push(upsertCommentaire(S.user.id, _projActuel.mat, 'projet_'+_projActuel.id, cmtInput.value.trim()));
+    }
     await Promise.all(promises);
     btn.textContent='✅ Enregistré !';
     setTimeout(async()=>{
