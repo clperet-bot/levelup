@@ -1308,6 +1308,32 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);font
   🙋 J'ai besoin d'aide !
 </button>
 
+<!-- Bouton flottant Pouls de classe (prof) -->
+<button id="pouls-btn" onclick="openPoulsClasse()" style="display:none;position:fixed;bottom:72px;right:16px;z-index:999;background:linear-gradient(135deg,#a78bfa,#7c3aed);color:#fff;border:none;border-radius:50px;padding:10px 18px;font-family:'Nunito',sans-serif;font-weight:900;font-size:.88rem;cursor:pointer;box-shadow:0 4px 16px rgba(124,58,237,.4);">
+  💜 Pouls de classe
+</button>
+
+<!-- MODAL POULS DE CLASSE -->
+<div id="modal-pouls" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:9998;align-items:flex-end;justify-content:center;padding:0;">
+  <div style="background:#fff;border-radius:24px 24px 0 0;padding:20px 16px;width:100%;max-width:600px;max-height:85vh;overflow-y:auto;position:relative;">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px;">
+      <div style="font-family:'Nunito',sans-serif;font-weight:900;font-size:1.05rem;color:#2d1a0e;">💬 Pouls de classe</div>
+      <button onclick="document.getElementById('modal-pouls').style.display='none'" style="background:#f5f5f5;border:none;border-radius:50%;width:32px;height:32px;cursor:pointer;font-size:1rem;">✕</button>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+      <select id="pouls-mat" style="flex:1;padding:8px 12px;border:2px solid #e2e8f0;border-radius:10px;font-family:'Nunito',sans-serif;font-size:.88rem;outline:none;" onchange="chargerPoulsClasse()">
+        <option value="">— Matière —</option>
+        <option value="fr">🇫🇷 Français</option>
+        <option value="en">🇬🇧 Anglais</option>
+      </select>
+      <select id="pouls-classe" style="flex:1;padding:8px 12px;border:2px solid #e2e8f0;border-radius:10px;font-family:'Nunito',sans-serif;font-size:.88rem;outline:none;" onchange="chargerPoulsClasse()">
+        <option value="">— Classe —</option>
+      </select>
+    </div>
+    <div id="pouls-content" style="font-family:'Nunito',sans-serif;"></div>
+  </div>
+</div>
+
 <!-- ECRAN AIDE -->
 <div class="screen" id="sc-aide">
   <div class="hdr">
@@ -1979,6 +2005,67 @@ function renderProfBadges(){
   cont.appendChild(sep);
 }
 
+async function openPoulsClasse(){
+  const modal = document.getElementById('modal-pouls');
+  modal.style.display = 'flex';
+  // Pré-remplir la matière si déjà sélectionnée
+  const matSel = document.getElementById('pouls-mat');
+  if(S.mat) matSel.value = S.mat;
+  // Charger les classes
+  const classes = await getClasses();
+  const clsSel = document.getElementById('pouls-classe');
+  clsSel.innerHTML = '<option value="">— Classe —</option>'
+    + classes.map(c=>`<option value="${c.code}">${c.code}</option>`).join('');
+  // Si une seule classe, la sélectionner automatiquement
+  if(classes.length === 1){ clsSel.value = classes[0].code; chargerPoulsClasse(); }
+  else if(S.mat) chargerPoulsClasse();
+}
+
+async function chargerPoulsClasse(){
+  const mat = document.getElementById('pouls-mat').value;
+  const classeCode = document.getElementById('pouls-classe').value;
+  const cont = document.getElementById('pouls-content');
+  if(!mat || !classeCode){ cont.innerHTML='<div style="color:var(--muted);font-size:.85rem;text-align:center;padding:16px;">Sélectionne une matière et une classe.</div>'; return; }
+  cont.innerHTML='<div style="text-align:center;padding:16px;">⏳</div>';
+
+  // Charger les élèves de la classe
+  const eleves = await sbFetch('eleves?classe_code=eq.'+classeCode+'&select=id,nom,prenom&order=nom.asc') || [];
+
+  // Charger les humeurs du jour
+  const today = new Date().toISOString().slice(0,10);
+  const humeurs = await sbFetch('humeurs?created_at=gte.'+today+'T00:00:00&select=eleve_id,valeur,created_at') || [];
+  const humeurMap = {};
+  humeurs.forEach(h=>{ humeurMap[h.eleve_id] = h.valeur; });
+
+  // Charger les derniers commentaires projet
+  const cmts = await sbFetch('commentaires?matiere=eq.'+mat+'&select=eleve_id,texte,created_at&order=created_at.desc') || [];
+  const cmtMap = {};
+  cmts.forEach(c=>{ if(!cmtMap[c.eleve_id]) cmtMap[c.eleve_id]=c.texte; });
+
+  const HUMEUR_EMOJIS = {0:'❤️',1:'😊',2:'😐',3:'😢',4:'😤',5:'😴'};
+  cont.innerHTML='';
+
+  if(!eleves.length){
+    cont.innerHTML='<div style="color:var(--muted);font-size:.85rem;text-align:center;padding:16px;">Aucun élève dans cette classe.</div>';
+    return;
+  }
+
+  eleves.forEach(elv=>{
+    const nom = elv.prenom+' '+elv.nom.charAt(0)+'.';
+    const humeur = humeurMap[elv.id];
+    const cmt = cmtMap[elv.id];
+    const row = document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 10px;border-radius:10px;margin-bottom:6px;background:'+(humeur!==undefined?'#fff':'#f8fafc')+';border:1px solid '+(humeur!==undefined?'#e2e8f0':'#f1f5f9')+';';
+    const emoji = humeur!==undefined ? HUMEUR_EMOJIS[humeur]||'😐' : '—';
+    row.innerHTML='<div style="font-size:1.4rem;width:32px;text-align:center;flex-shrink:0;">'+emoji+'</div>'
+      +'<div style="flex:1;">'
+      +'<div style="font-size:.82rem;font-weight:700;color:#2d1a0e;">'+nom+'</div>'
+      +(cmt?'<div style="font-size:.72rem;color:#92614a;margin-top:2px;font-style:italic;">'+cmt+'</div>':'')
+      +'</div>';
+    cont.appendChild(row);
+  });
+}
+
 async function loginProf(){
   const pwd = document.getElementById('pr-pwd').value.trim();
   const err = document.getElementById('pr-err');
@@ -2022,6 +2109,13 @@ function goTo(id){
     const elvScreens = ['sc-cats','sc-projet','sc-graph','sc-elv-rew','sc-docs','sc-mat'];
     const isEleve = S.user && S.user.role !== 'prof';
     sosBtn.style.display = (isEleve && elvScreens.includes(id)) ? 'block' : 'none';
+  }
+  // Bouton Pouls de classe — visible pour le prof
+  const poulsBtn = document.getElementById('pouls-btn');
+  if(poulsBtn){
+    const profScreens = ['sc-prof','sc-eval-items','sc-cats-prof'];
+    const isProf = S.user && S.user.role === 'prof';
+    poulsBtn.style.display = (isProf && profScreens.includes(id)) ? 'block' : 'none';
   }
   ['nb-home','nb-rew','nb-prog','nb-docs','nb-graph'].forEach(n=>{ const el=document.getElementById(n); if(el) el.classList.remove('on'); });
   if(id==='sc-elv-rew') document.getElementById('nb-rew').classList.add('on');
@@ -2727,11 +2821,11 @@ async function getActModes(eleveId){
 }
 
 async function saveActMode(eleveId, projId, actId, mode){
-  // Supprimer l'ancien mode pour cette activité puis insérer le nouveau
-  await sbFetch('act_modes?eleve_id=eq.'+eleveId+'&proj_id=eq.'+projId+'&act_id=eq.'+actId, {method:'DELETE'});
-  if(mode){
-    await sbFetch('act_modes', {method:'POST', prefer:'return=minimal', body:{eleve_id:eleveId, proj_id:projId, act_id:actId, mode}});
-  }
+  if(!mode) return; // ne rien faire si on déselectionne
+  // Vérifier si ce mode existe déjà pour cette activité
+  const existing = await sbFetch('act_modes?eleve_id=eq.'+eleveId+'&proj_id=eq.'+projId+'&act_id=eq.'+actId+'&mode=eq.'+mode+'&select=id');
+  if(existing && existing.length > 0) return; // déjà enregistré
+  await sbFetch('act_modes', {method:'POST', prefer:'return=minimal', body:{eleve_id:eleveId, proj_id:projId, act_id:actId, mode}});
 }
 
 async function deleteActMode(eleveId, projId, actId){
@@ -2868,7 +2962,7 @@ async function renderActivitesEleve(proj){
 
   const allModes = await getActModes(S.user.id);
   const modeMap = {};
-  allModes.filter(m=>m.proj_id===proj.id).forEach(m=>{ modeMap[m.act_id]=m.mode; });
+  allModes.filter(m=>m.proj_id===proj.id).forEach(m=>{ if(!modeMap[m.act_id]) modeMap[m.act_id]=new Set(); modeMap[m.act_id].add(m.mode); });
 
   cont.innerHTML='';
   const sep=document.createElement('div');
@@ -2895,7 +2989,7 @@ async function renderActivitesEleve(proj){
 
   acts.forEach(a=>{
     const actKey=a.act_id||a.id;
-    const curMode=modeMap[actKey]||null;
+    const curModes=modeMap[actKey]||new Set();
     const row=document.createElement('div');
     row.style.cssText='padding:10px 14px;background:#fff;border:1.5px solid '+(curMode?'#16a34a':'#e2e8f0')+';border-radius:12px;margin-bottom:8px;';
 
@@ -2913,12 +3007,12 @@ async function renderActivitesEleve(proj){
     modeBtns.style.cssText='display:flex;gap:6px;flex-wrap:wrap;';
     [{k:'oral',l:'🗣️ Oral'},{k:'ecrit',l:'✍️ Écrit'},{k:'interaction',l:'💬 Interaction'}].forEach(({k,l})=>{
       const btn=document.createElement('button');
-      const sel=curMode===k;
+      const sel=curModes.has(k);
       btn.style.cssText='padding:5px 12px;border-radius:20px;border:1.5px solid '+(sel?'#16a34a':'#d1d5db')+';background:'+(sel?'#dcfce7':'#fff')+';font-family:Nunito,sans-serif;font-size:.75rem;font-weight:700;cursor:pointer;color:'+(sel?'#15803d':'var(--text)')+';';
       btn.textContent=l;
       btn.onclick=async(e)=>{
         e.stopPropagation();
-        const nowSel=modeMap[actKey]===k;
+        const nowSel=(modeMap[actKey]||new Set()).has(k);
         const newMode=nowSel?null:k;
         await saveActMode(S.user.id, proj.id, actKey, newMode);
         if(newMode) await toggleActiviteDoneDB(S.user.id, proj.id, actKey, true);
@@ -2964,7 +3058,7 @@ async function renderActivitesConsult(cont, eleveId, proj){
 
   const allModes = await getActModes(eleveId);
   const modeMap={};
-  allModes.filter(m=>m.proj_id===proj.id).forEach(m=>{ modeMap[m.act_id]=m.mode; });
+  allModes.filter(m=>m.proj_id===proj.id).forEach(m=>{ if(!modeMap[m.act_id]) modeMap[m.act_id]=new Set(); modeMap[m.act_id].add(m.mode); });
 
   const MODES={oral:'🗣️ Oral', ecrit:'✍️ Écrit', interaction:'💬 Interaction'};
 
@@ -3645,7 +3739,10 @@ async function _renderConsultEleve(cont, eleveId, nom, code, reopenId){
       const actKey = act.act_id||act.id;
       const m = projModes.find(m=>m.act_id===actKey);
       if(m && m.mode && act.compIds){
-        act.compIds.forEach(cid=>{ compModeMap[cid] = m.mode; });
+        act.compIds.forEach(cid=>{
+          if(!compModeMap[cid]) compModeMap[cid] = new Set();
+          compModeMap[cid].add(m.mode);
+        });
       }
     }
   }
@@ -3833,12 +3930,12 @@ async function _renderConsultEleve(cont, eleveId, nom, code, reopenId){
       lblDiv.style.cssText='flex:1;font-size:.79rem;font-weight:600;color:var(--text);line-height:1.3;';
       lblDiv.textContent=label;
       // Badge mode si l'élève a indiqué comment il a pratiqué cette compétence
-      const compMode = compModeMap[itemId];
-      if(compMode){
+      const compModes = compModeMap[itemId];
+      if(compModes && compModes.size > 0){
         const MODE_LABELS={oral:'🗣️',ecrit:'✍️',interaction:'💬'};
         const badge=document.createElement('span');
         badge.style.cssText='font-size:.7rem;margin-left:4px;opacity:.8;';
-        badge.textContent=MODE_LABELS[compMode]||'';
+        badge.textContent=[...compModes].map(m=>MODE_LABELS[m]||'').join('');
         lblDiv.appendChild(badge);
       }
 
@@ -6688,7 +6785,7 @@ async function openProjetEleve(proj){
   // Charger les modes
   const allModes = await getActModes(S.user.id);
   const modeMap = {};
-  allModes.filter(m=>m.proj_id===proj.id).forEach(m=>{ modeMap[m.act_id]=m.mode; });
+  allModes.filter(m=>m.proj_id===proj.id).forEach(m=>{ if(!modeMap[m.act_id]) modeMap[m.act_id]=new Set(); modeMap[m.act_id].add(m.mode); });
 
   if(acts.length){
     acts.forEach(act=>{
@@ -6712,15 +6809,15 @@ async function openProjetEleve(proj){
       const modeBtns=document.createElement('div');
       modeBtns.style.cssText='display:flex;gap:6px;flex-wrap:wrap;';
       const actKey=act.act_id||act.id;
-      const curMode=modeMap[actKey]||null;
+      const curModes=modeMap[actKey]||new Set();
       [{k:'oral',l:'🗣️ Oral'},{k:'ecrit',l:'✍️ Écrit'},{k:'interaction',l:'💬 Interaction'}].forEach(({k,l})=>{
         const btn=document.createElement('button');
-        const sel=curMode===k;
+        const sel=curModes.has(k);
         btn.style.cssText='padding:5px 12px;border-radius:20px;border:1.5px solid '+(sel?'#16a34a':'#bbf7d0')+';background:'+(sel?'#16a34a':'#fff')+';font-family:\'Nunito\',sans-serif;font-size:.72rem;font-weight:700;cursor:pointer;color:'+(sel?'#fff':'#15803d')+';';
         btn.textContent=l;
         btn.onclick=async(e)=>{
           e.stopPropagation();
-          const nowSel=modeMap[actKey]===k;
+          const nowSel=(modeMap[actKey]||new Set()).has(k);
           const newMode=nowSel?null:k;
           await saveActMode(S.user.id, proj.id, actKey, newMode);
           modeMap[actKey]=newMode;
