@@ -2719,6 +2719,25 @@ async function toggleActiviteDoneDB(eleveId, projId, actId, done){
   }
 }
 
+async function getActModes(eleveId){
+  try{
+    const rows = await sbFetch('act_modes?eleve_id=eq.'+eleveId+'&select=id,proj_id,act_id,mode,created_at&order=created_at.desc');
+    return rows || [];
+  }catch(e){ return []; }
+}
+
+async function saveActMode(eleveId, projId, actId, mode){
+  // Supprimer l'ancien mode pour cette activité puis insérer le nouveau
+  await sbFetch('act_modes?eleve_id=eq.'+eleveId+'&proj_id=eq.'+projId+'&act_id=eq.'+actId, {method:'DELETE'});
+  if(mode){
+    await sbFetch('act_modes', {method:'POST', prefer:'return=minimal', body:{eleve_id:eleveId, proj_id:projId, act_id:actId, mode}});
+  }
+}
+
+async function deleteActMode(eleveId, projId, actId){
+  await sbFetch('act_modes?eleve_id=eq.'+eleveId+'&proj_id=eq.'+projId+'&act_id=eq.'+actId, {method:'DELETE'});
+}
+
 // ── Création de projet : afficher les suggestions + checkboxes compétences ──
 function renderActivitesSuggestions(){
   const bank = getActivitesBank();
@@ -2846,35 +2865,82 @@ async function renderActivitesEleve(proj){
   if(!cont||!proj) return;
   const acts=getActivitesProjet(proj.id);
   if(!acts.length){ cont.innerHTML=''; return; }
-  const done=await getActivitesDoneDB(S.user.id, proj.id).catch(()=>({}));
+  const done=await getActivitesDoneDB(S.user.id, proj.id).catch(()=>[]);
   const doneIds=new Set(done.map?done.map(d=>d.act_id):Object.keys(done).filter(k=>done[k]));
+  const allModes = await getActModes(S.user.id);
+  const modeMap = {}; // act_id → mode
+  allModes.filter(m=>m.proj_id===proj.id).forEach(m=>{ modeMap[m.act_id]=m.mode; });
+
   cont.innerHTML='';
   const sep=document.createElement('div');
   sep.style.cssText='margin:16px 0 12px;display:flex;align-items:center;gap:10px;';
-  sep.innerHTML='<div style="flex:1;height:2px;background:linear-gradient(90deg,#bae6fd,transparent)"></div>'
-    +'<span style="font-size:.75rem;font-weight:800;color:#0369a1;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;">📋 Mes activités</span>'
-    +'<div style="flex:1;height:2px;background:linear-gradient(270deg,#bae6fd,transparent)"></div>';
+  sep.innerHTML='<div style="flex:1;height:2px;background:linear-gradient(90deg,#bbf7d0,transparent)"></div>'
+    +'<span style="font-size:.75rem;font-weight:800;color:#15803d;text-transform:uppercase;letter-spacing:.4px;white-space:nowrap;">📋 Mes activités</span>'
+    +'<div style="flex:1;height:2px;background:linear-gradient(270deg,#bbf7d0,transparent)"></div>';
   cont.appendChild(sep);
-  const intro=document.createElement('div');
-  intro.style.cssText='font-size:.78rem;color:var(--muted);font-weight:600;margin-bottom:10px;';
-  intro.textContent='Coche les activités que tu as faites !';
-  cont.appendChild(intro);
+
+  // Alerte si anglais et 3+ entraînements avec un seul mode
+  if(proj.mat==='en'){
+    const enModes = allModes.filter(m=>m.mode);
+    if(enModes.length>=3){
+      const counts={oral:0,ecrit:0,interaction:0};
+      enModes.forEach(m=>{ if(counts[m.mode]!==undefined) counts[m.mode]++; });
+      const total = enModes.length;
+      const missing = Object.entries(counts).filter(([k,v])=>v===0).map(([k])=>k==='oral'?'l\'oral':k==='ecrit'?'l\'écrit':'l\'interaction');
+      if(missing.length>0){
+        const alert=document.createElement('div');
+        alert.style.cssText='background:#fef9c3;border:1.5px solid #fde68a;border-radius:12px;padding:10px 14px;margin-bottom:12px;font-size:.8rem;font-weight:700;color:#92400e;';
+        alert.innerHTML='💡 Tu t\'entraînes beaucoup mais pense aussi à pratiquer '+missing.join(' et ')+'  !';
+        cont.appendChild(alert);
+      }
+    }
+  }
+
   acts.forEach(a=>{
     const isDone=doneIds.has(a.id);
+    const curMode=modeMap[a.act_id||a.id]||null;
     const row=document.createElement('div');
-    row.style.cssText='display:flex;align-items:center;gap:10px;padding:10px 14px;background:'+(isDone?'#f0fdf4':'#fff')+';border:2px solid '+(isDone?'#16a34a':'#e2e8f0')+';border-radius:12px;margin-bottom:8px;cursor:pointer;transition:all .2s;';
+    row.style.cssText='padding:10px 14px;background:'+(isDone?'#f0fdf4':'#fff')+';border:1.5px solid '+(isDone?'#16a34a':'#e2e8f0')+';border-radius:12px;margin-bottom:8px;';
+
+    // Ligne titre + checkbox
+    const top=document.createElement('div');
+    top.style.cssText='display:flex;align-items:center;gap:10px;cursor:pointer;';
     const cb=document.createElement('div');
     cb.style.cssText='width:22px;height:22px;border-radius:6px;border:2px solid '+(isDone?'#16a34a':'#d1d5db')+';background:'+(isDone?'#16a34a':'#fff')+';display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:.85rem;';
     cb.textContent=isDone?'✓':'';
     const lbl=document.createElement('div');
     lbl.style.cssText='flex:1;font-weight:700;font-size:.82rem;color:'+(isDone?'#15803d':'var(--text)')+';';
     lbl.textContent=a.titre;
-    row.appendChild(cb); row.appendChild(lbl);
-    row.onclick=async()=>{
+    top.appendChild(cb); top.appendChild(lbl);
+    top.onclick=async()=>{
       const nowDone=!doneIds.has(a.id);
-      await toggleActiviteDoneDB(S.user.id, proj.id, a.id, nowDone);
+      await toggleActiviteDoneDB(S.user.id, proj.id, a.act_id||a.id, nowDone);
       renderActivitesEleve(proj);
     };
+    row.appendChild(top);
+
+    // Boutons mode (oral/écrit/interaction) — visibles seulement si activité cochée
+    if(isDone){
+      const modeDiv=document.createElement('div');
+      modeDiv.style.cssText='display:flex;gap:6px;margin-top:10px;flex-wrap:wrap;';
+      const modeLabel=document.createElement('div');
+      modeLabel.style.cssText='font-size:.7rem;font-weight:700;color:var(--muted);margin-bottom:6px;width:100%;';
+      modeLabel.textContent='Comment tu t\'es entraîné(e) ?';
+      modeDiv.appendChild(modeLabel);
+      [{k:'oral',l:'🗣️ Oral'},{k:'ecrit',l:'✍️ Écrit'},{k:'interaction',l:'💬 Interaction'}].forEach(({k,l})=>{
+        const btn=document.createElement('button');
+        const sel=curMode===k;
+        btn.style.cssText='padding:6px 14px;border-radius:20px;border:1.5px solid '+(sel?'#16a34a':'#d1d5db')+';background:'+(sel?'#dcfce7':'#fff')+';font-family:\'Nunito\',sans-serif;font-size:.75rem;font-weight:700;cursor:pointer;color:'+(sel?'#15803d':'var(--text)')+';';
+        btn.textContent=l;
+        btn.onclick=async(e)=>{
+          e.stopPropagation();
+          await saveActMode(S.user.id, proj.id, a.act_id||a.id, sel?null:k);
+          renderActivitesEleve(proj);
+        };
+        modeDiv.appendChild(btn);
+      });
+      row.appendChild(modeDiv);
+    }
     cont.appendChild(row);
   });
 }
@@ -2885,7 +2951,7 @@ async function renderActivitesConsult(cont, eleveId, proj){
   const acts=getActivitesProjet(proj.id);
 
   const sep=document.createElement('div');
-  sep.style.cssText='margin:14px 0 8px;font-weight:800;font-size:.8rem;color:#0369a1;';
+  sep.style.cssText='margin:14px 0 8px;font-weight:800;font-size:.8rem;color:#15803d;';
   sep.textContent='📋 Activités réalisées';
   cont.appendChild(sep);
 
@@ -2900,17 +2966,37 @@ async function renderActivitesConsult(cont, eleveId, proj){
   const done=await getActivitesDoneDB(eleveId, proj.id).catch(()=>[]);
   const doneMap={};
   (done||[]).forEach(d=>{ doneMap[d.act_id]={date:d.done_at}; });
+
+  const allModes = await getActModes(eleveId);
+  const modeMap={};
+  allModes.filter(m=>m.proj_id===proj.id).forEach(m=>{ modeMap[m.act_id]=m.mode; });
+
+  const MODES={oral:'🗣️ Oral', ecrit:'✍️ Écrit', interaction:'💬 Interaction'};
+
   let hasDone=false;
   acts.forEach(a=>{
-    const d=doneMap[a.id];
+    const d=doneMap[a.id]||doneMap[a.act_id];
     if(!d) return;
     hasDone=true;
+    const mode=modeMap[a.id]||modeMap[a.act_id]||null;
     const row=document.createElement('div');
     row.style.cssText='display:flex;align-items:center;gap:8px;padding:7px 10px;background:#f0fdf4;border:1.5px solid #16a34a;border-radius:10px;margin-bottom:6px;';
     const dt=new Date(d.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'});
+    const modeHtml=mode?'<span style="background:#dcfce7;color:#15803d;font-size:.65rem;font-weight:700;padding:2px 8px;border-radius:10px;margin-left:4px;">'+MODES[mode]+'</span>':'';
     row.innerHTML='<span style="color:#16a34a;font-size:1rem">✓</span>'
-      +'<div style="flex:1;font-size:.78rem;font-weight:700;">'+a.titre+'</div>'
+      +'<div style="flex:1;font-size:.78rem;font-weight:700;">'+a.titre+modeHtml+'</div>'
       +'<div style="font-size:.68rem;color:var(--muted);font-weight:600;">'+dt+'</div>';
+    // Bouton supprimer
+    const delBtn=document.createElement('button');
+    delBtn.style.cssText='background:#fef2f2;border:1px solid #fca5a5;color:#ef4444;padding:3px 8px;border-radius:8px;font-size:.7rem;cursor:pointer;font-family:Nunito,sans-serif;flex-shrink:0;';
+    delBtn.textContent='✕';
+    delBtn.onclick=async()=>{
+      const actId=a.id||a.act_id;
+      await toggleActiviteDoneDB(eleveId, proj.id, actId, false);
+      await deleteActMode(eleveId, proj.id, actId);
+      renderActivitesConsult(cont, eleveId, proj);
+    };
+    row.appendChild(delBtn);
     cont.appendChild(row);
   });
   if(!hasDone){
@@ -6583,26 +6669,31 @@ async function openProjetEleve(proj){
     // Afficher les activités avec leurs compétences
     acts.forEach(act=>{
       const actBlock = document.createElement('div');
-      actBlock.style.cssText='margin-bottom:16px;background:#f0f9ff;border-radius:16px;padding:14px;border:2px solid #bae6fd;';
+      actBlock.style.cssText='margin-bottom:16px;border-radius:16px;border:0.5px solid #bbf7d0;overflow:hidden;';
 
-      const actTitle = document.createElement('div');
-      actTitle.style.cssText='font-weight:900;font-size:.95rem;color:#0369a1;margin-bottom:10px;display:flex;align-items:center;gap:8px;';
-      actTitle.innerHTML='📋 '+act.titre;
-      actBlock.appendChild(actTitle);
+      const actHeader = document.createElement('div');
+      actHeader.style.cssText='background:#dcfce7;padding:10px 16px;border-bottom:0.5px solid #bbf7d0;';
+      actHeader.innerHTML='<div style="font-size:.62rem;font-weight:700;color:#15803d;text-transform:uppercase;letter-spacing:.6px;margin-bottom:2px;">Activité</div>'
+        +'<div style="font-size:.92rem;font-weight:700;color:#14532d;">'+act.titre+'</div>';
+      actBlock.appendChild(actHeader);
+
+      const actBody = document.createElement('div');
+      actBody.style.cssText='padding:10px 14px;background:#fff;display:flex;flex-direction:column;gap:8px;';
 
       if(act.compIds && act.compIds.length){
         act.compIds.forEach(itemId=>{
           _projTemp[itemId] = null;
           const ih = histFiltered[itemId] || [];
           const ihAll = hist[itemId] || [];
-          actBlock.appendChild(makeCompCard(itemId, ih, ihAll));
+          actBody.appendChild(makeCompCard(itemId, ih, ihAll));
         });
       } else {
         const empty = document.createElement('div');
-        empty.style.cssText='font-size:.75rem;color:var(--muted);font-style:italic;';
+        empty.style.cssText='font-size:.75rem;color:var(--muted);font-style:italic;padding:4px 0;';
         empty.textContent='Aucune compétence associée à cette activité.';
-        actBlock.appendChild(empty);
+        actBody.appendChild(empty);
       }
+      actBlock.appendChild(actBody);
       list.appendChild(actBlock);
     });
 
