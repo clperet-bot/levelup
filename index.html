@@ -2366,33 +2366,29 @@ const AUTO_REWARDS = [
 // pct basé sur : combien de compétences projet ont bestVal >= seuil
 // Argent : 25% en Bien(2+), Or : 50% en TresBien(3+), Diamant : 75% Excellent(4), Diamant★ : 100% Excellent
 function calcXPPct(xpItems, hist, projCreatedAt, eleveId){
-  if(!xpItems.length) return {pct:0, level:XP_LEVELS[0], counts:{bien:0,tresb:0,exc:0}, total:0};
+  if(!xpItems.length) return {pct:0, level:XP_LEVELS[0], counts:{bien:0,tresb:0,exc:0}, total:0, stored:{}};
   const total = xpItems.length;
+  // Calculer le meilleur score par compétence depuis l'historique filtré
+  // On garde aussi le localStorage comme cache si disponible, mais on ne bloque pas dessus
   const storageKey = 'xp_best_'+(eleveId||'none')+'_'+(projCreatedAt||'none');
   let stored = {};
   try{ stored = JSON.parse(localStorage.getItem(storageKey)||'{}'); } catch(e){}
   let changed = false;
   xpItems.forEach(id=>{
-    const entries = (hist[id]||[]).filter(e=>!e.date||e.date>=projCreatedAt);
+    const entries = (hist[id]||[]).filter(e=>!e.date||!projCreatedAt||e.date>=projCreatedAt);
     const b = bestVal(entries);
     if(b !== null && (stored[id]===undefined || b > stored[id])){
       stored[id] = b; changed = true;
     }
   });
-  if(changed) localStorage.setItem(storageKey, JSON.stringify(stored));
+  try{ if(changed) localStorage.setItem(storageKey, JSON.stringify(stored)); } catch(e){}
   const bien   = xpItems.filter(id=>(stored[id]||0)>=2).length;
   const tresb  = xpItems.filter(id=>(stored[id]||0)>=3).length;
   const exc    = xpItems.filter(id=>(stored[id]||0)>=4).length;
-  // Calcul %
-  // Diamant★ = 100% excellent
   if(exc === total) return {pct:100, level:XP_LEVELS[4], counts:{bien,tresb,exc}, total, stored};
-  // Diamant = 75% excellent
   if(exc/total >= 0.75) return {pct:Math.round(75 + 25*(exc/total - 0.75)/0.25), level:XP_LEVELS[3], counts:{bien,tresb,exc}, total, stored};
-  // Or = 50% tresbien
   if(tresb/total >= 0.5) return {pct:Math.round(50 + 25*(Math.min(exc/total,0.75) - 0)/(0.75)), level:XP_LEVELS[2], counts:{bien,tresb,exc}, total, stored};
-  // Argent = 25% bien
   if(bien/total >= 0.25) return {pct:Math.round(25 + 25*(tresb/total)/(0.5)), level:XP_LEVELS[1], counts:{bien,tresb,exc}, total, stored};
-  // Bronze
   return {pct:Math.round(25*(bien/total)/(0.25)), level:XP_LEVELS[0], counts:{bien,tresb,exc}, total, stored};
 }
 
@@ -6113,11 +6109,10 @@ async function genererRecapPDF(){
       const hist=scoresToHist(scoresFilt); const histProf=scoresToHist(evalsFilt);
       const proj=await getProjetActif(mat,classeCode);
       const allItemIds=proj?proj.itemIds:[];
-      const pct=allItemIds.length?Math.max(
-        calcXPPct(allItemIds,hist,proj?.createdAt||proj?.created_at||'1970-01-01',elv?.id),
-        calcXPPct(allItemIds,histProf,proj?.createdAt||proj?.created_at||'1970-01-01',elv?.id)
-      ):0;
-      const level=getXPLevel(pct);
+      const xpElv  = calcXPPct(allItemIds, hist,     proj?.createdAt||proj?.created_at||'1970-01-01', elv?.id);
+      const xpProf = calcXPPct(allItemIds, histProf, proj?.createdAt||proj?.created_at||'1970-01-01', elv?.id);
+      const pct = allItemIds.length ? Math.max(xpElv.pct, xpProf.pct) : 0;
+      const level = getXPLevel(pct);
       const noteProj=proj?(()=>{
         // Utiliser les notes prof en priorité, sinon élève
         const vals=proj.itemIds.map(id=>{
