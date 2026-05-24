@@ -6084,11 +6084,10 @@ async function genererRecapPDF(){
   if(!classeCode){ alert('Choisis une classe !'); return; }
   const mat = _recapMat;
   const periode = _recapPeriode;
-  const periodeLabel = periode==='s1'?'Semestre 1':periode==='s2'?'Semestre 2':'Fin d\'année';
-  const matLabel = mat==='fr'?'🇫🇷 Français':'🇬🇧 Anglais';
   const today = new Date().toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit',year:'numeric'});
   const btn = document.querySelector('[onclick="genererRecapPDF()"]');
   if(btn){ btn.textContent='⏳ Chargement...'; btn.disabled=true; }
+
   let eleves = [], classes = [];
   try {
     [eleves, classes] = await Promise.all([getElevesOfClasse(classeCode), getClasses()]);
@@ -6096,129 +6095,204 @@ async function genererRecapPDF(){
   if(!eleves.length){ alert('Aucun élève dans cette classe.'); if(btn){btn.textContent='📄 Télécharger';btn.disabled=false;} return; }
 
   const {debut, fin} = getPeriodeDates(classes, classeCode, periode);
-  const periodeInfo = debut&&fin ? ' ('+debut+' > '+fin+')' : ' (toutes les evaluations)';
 
+  // Récupérer TOUS les projets de la classe (triés par date)
+  const tousLesProjets = (await getProjets())
+    .filter(p => p.mat === mat && p.classe === classeCode)
+    .sort((a,b) => (a.createdAt||'').localeCompare(b.createdAt||''));
+
+  // Construire les données par élève
   const rows = [];
   for(let i=0;i<eleves.length;i++){
-    const elv=eleves[i];
+    const elv = eleves[i];
     if(btn) btn.textContent=`⏳ ${i+1}/${eleves.length} — ${formatNomAffichage(elv.nom)}`;
     try {
-      const [scores,evalProfRows,comportRows]=await Promise.all([getScores(elv.id,mat),getEvalProf(elv.id,mat),getComportements(elv.id,mat).catch(()=>[])]);
-      // Filtrer par période
-      const scoresFilt = filterByPeriode(scores, debut, fin);
-      const evalsFilt  = filterByPeriode(evalProfRows, debut, fin);
-      const comportFilt= filterByPeriode(comportRows, debut, fin);
-      const hist=scoresToHist(scoresFilt); const histProf=scoresToHist(evalsFilt);
-      const proj=await getProjetActif(mat,classeCode);
-      const allItemIds=proj?proj.itemIds:[];
-      const xpElv  = calcXPPct(allItemIds, hist,     proj?.createdAt||proj?.created_at||'1970-01-01', elv?.id);
-      const xpProf = calcXPPct(allItemIds, histProf, proj?.createdAt||proj?.created_at||'1970-01-01', elv?.id);
-      const pct = allItemIds.length ? Math.max(xpElv.pct, xpProf.pct) : 0;
-      const level = XP_LEVELS.find(l=>pct<=l.max)||XP_LEVELS[XP_LEVELS.length-1];
-      const noteProj=proj?(()=>{
-        // Utiliser les notes prof en priorité, sinon élève
-        const vals=proj.itemIds.map(id=>{
-          const vProf=bestVal(histProf[id]);
-          const vElv=bestVal(hist[id]);
-          return vProf!==null?vProf:(vElv!==null?vElv:null);
-        }).filter(v=>v!==null);
-        return vals.length?top3avg(vals):null;
-      })():null;
-      const noteTransv=transvScoreProf(mat,histProf);
-      const cc={};comportFilt.forEach(r=>(r.smileys||[]).forEach(s=>{cc[s]=(cc[s]||0)+1;}));
-      const top=Object.entries(cc).sort((a,b)=>b[1]-a[1]).slice(0,3).map(([s])=>s);
-      rows.push({nom:formatNomAffichage(elv.nom),level,pct:Math.round(pct),noteProj,noteTransv,topSmileys:top});
-    } catch(e){ rows.push({nom:formatNomAffichage(elv.nom),level:{lbl:'—'},pct:0,noteProj:null,noteTransv:null,topSmileys:[]}); }
+      const [evalProfRows, comportRows] = await Promise.all([
+        getEvalProf(elv.id, mat),
+        getComportements(elv.id, mat).catch(()=>[])
+      ]);
+      const evalsFilt   = filterByPeriode(evalProfRows, debut, fin);
+      const comportFilt = filterByPeriode(comportRows, debut, fin);
+      const histProf = scoresToHist(evalsFilt);
+
+      // Note globale prof : top3avg de TOUTES les compétences évaluées
+      const noteGlobale = globalScore(mat, histProf);
+
+      // Note par projet : top3avg des items du projet (notes prof uniquement)
+      const notesProjets = tousLesProjets.map(proj => {
+        const vals = (proj.itemIds||[])
+          .map(id => bestVal(histProf[id]))
+          .filter(v => v !== null);
+        return vals.length ? top3avg(vals) : null;
+      });
+
+      // Comportement dominant : smiley le plus fréquent
+      const cc = {};
+      comportFilt.forEach(r => (r.smileys||[]).forEach(s => { cc[s]=(cc[s]||0)+1; }));
+      const smileyDominant = Object.entries(cc).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
+
+      rows.push({ nom: formatNomAffichage(elv.nom), noteGlobale, notesProjets, smileyDominant });
+    } catch(e) {
+      rows.push({ nom: formatNomAffichage(elv.nom), noteGlobale: null, notesProjets: tousLesProjets.map(()=>null), smileyDominant: null });
+    }
   }
-  rows.sort((a,b)=>b.pct-a.pct);
-  const tr=rows.map((r,i)=>'<tr style="background:'+(i%2===0?'#fffdf9':'#fff')+'"><td style="padding:7px 10px;font-weight:700;font-size:.82rem;">'+r.nom+'</td><td style="padding:7px 10px;text-align:center;"><span style="background:#fff3e6;color:#c2410c;border-radius:6px;padding:2px 8px;font-size:.68rem;font-weight:800;">'+r.level.lbl+'</span></td><td style="padding:7px 10px;"><div style="display:flex;align-items:center;gap:6px;"><div style="flex:1;background:#fde8d0;border-radius:20px;height:8px;overflow:hidden;"><div style="height:100%;width:'+r.pct+'%;background:linear-gradient(90deg,#ffb347,#ff6b35);border-radius:20px;"></div></div><span style="font-size:.68rem;font-weight:800;color:#ff6b35;width:28px;">'+r.pct+'%</span></div></td><td style="padding:7px 10px;text-align:center;font-weight:800;font-size:.78rem;color:#1d4ed8;">'+(r.noteProj!==null?r.noteProj+'/10':'—')+'</td><td style="padding:7px 10px;text-align:center;font-weight:800;font-size:.78rem;color:#6b21a8;">'+(r.noteTransv!==null?r.noteTransv+'/10':'—')+'</td><td style="padding:7px 10px;text-align:center;font-size:1rem;">'+(r.topSmileys.join(' ')||'—')+'</td></tr>').join('');
-  const moy=rows.length?Math.round(rows.reduce((s,r)=>s+r.pct,0)/rows.length):0;
-  const best=rows.filter(r=>r.noteProj!==null).sort((a,b)=>b.noteProj-a.noteProj)[0];
-  // Générer le PDF avec jsPDF
+
+  // Trier par note globale décroissante
+  rows.sort((a,b) => {
+    if(a.noteGlobale===null && b.noteGlobale===null) return 0;
+    if(a.noteGlobale===null) return 1;
+    if(b.noteGlobale===null) return -1;
+    return b.noteGlobale - a.noteGlobale;
+  });
+
+  // ── Génération PDF ──
+  // Calcul orientation selon nb de colonnes
+  const nbProjCols = tousLesProjets.length;
+  const totalCols = 2 + nbProjCols + 1; // Nom + NoteGlob + projets + Comport.
+  const usePortrait = nbProjCols <= 3;
   const {jsPDF} = window.jspdf;
-  const doc = new jsPDF({orientation:'portrait', unit:'mm', format:'a4'});
+  const doc = new jsPDF({ orientation: usePortrait ? 'portrait' : 'landscape', unit:'mm', format:'a4' });
   const pageW = doc.internal.pageSize.getWidth();
-  const margin = 15;
+  const pageH = doc.internal.pageSize.getHeight();
+  const margin = 14;
   let y = margin;
 
-  // Logo + titre
+  // ── En-tête ──
   doc.setFont('helvetica','bold');
   doc.setFontSize(18);
   doc.setTextColor(245,158,11); doc.text('Level', margin, y);
   const levelW = doc.getTextWidth('Level');
   doc.setTextColor(255,107,53); doc.text('Up', margin+levelW, y);
   doc.setTextColor(45,26,14);
-  doc.setFontSize(14);
-  doc.text('Recapitulatif - '+classeCode, margin+levelW+doc.getTextWidth('Up')+6, y);
+  doc.setFontSize(13);
+  doc.text('Recapitulatif — '+classeCode, margin+levelW+doc.getTextWidth('Up')+5, y);
   y += 6;
-  doc.setFont('helvetica','normal');
-  doc.setFontSize(9);
-  doc.setTextColor(146,97,74);
+  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(146,97,74);
   const matTxt = mat==='fr'?'Francais':'Anglais';
   const periodeTxt = periode==='s1'?'Semestre 1':periode==='s2'?'Semestre 2':'Fin d\'annee';
   const dateTxt = debut&&fin?' ('+debut+' > '+fin+')':'';
-  doc.text(matTxt+' - '+periodeTxt+dateTxt+' - '+today, margin, y);
-  y += 8;
+  doc.text(matTxt+' — '+periodeTxt+dateTxt+' — '+today, margin, y);
+  y += 5;
 
   // Ligne orange
-  doc.setDrawColor(255,107,53); doc.setLineWidth(0.8);
+  doc.setDrawColor(255,107,53); doc.setLineWidth(0.7);
   doc.line(margin, y, pageW-margin, y);
-  y += 6;
-
-  // Stats — fond crème uniforme
-  const statW = (pageW - margin*2 - 8) / 3;
-  const statData = [[String(rows.length),'Eleves'],[moy+'%','Moy. progression'],[best?best.noteProj+'/10':'--','Meilleure note']];
-  statData.forEach(([val,lbl],i)=>{
-    const sx = margin + i*(statW+4);
-    doc.setFillColor(255,249,242); doc.setDrawColor(253,220,202); doc.setLineWidth(0.3);
-    doc.roundedRect(sx, y, statW, 14, 2, 2, 'FD');
-    doc.setFont('helvetica','bold'); doc.setFontSize(13); doc.setTextColor(255,107,53);
-    doc.text(val, sx+statW/2, y+7, {align:'center'});
-    doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(146,97,74);
-    doc.text(lbl.toUpperCase(), sx+statW/2, y+12, {align:'center'});
-  });
-  y += 20;
-
-  // En-têtes tableau
-  const cols = ['Eleve','Niveau','Progression','Projet','Transversales','Comport.'];
-  const colW = [50, 22, 40, 18, 22, 18];
-  doc.setFillColor(255,249,242); doc.rect(margin, y, pageW-margin*2, 7, 'F');
-  doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(146,97,74);
-  let cx = margin+2;
-  cols.forEach((c,i)=>{ doc.text(c, cx, y+5); cx+=colW[i]; });
   y += 7;
+
+  // ── Calcul largeurs colonnes ──
+  const colWNom = 46;
+  const colWGlob = 22;
+  const colWComport = 18;
+  const colWProjBase = 4; // minimum
+  const projZoneW = pageW - margin*2 - colWNom - colWGlob - colWComport;
+  const colWProj = nbProjCols > 0 ? Math.max(colWProjBase, Math.floor(projZoneW / nbProjCols)) : 0;
+
+  // En-têtes colonnes
+  const ROW_H = 9;
+  const HEADER_H = 14; // double hauteur pour les titres projets longs
+
+  doc.setFillColor(255,242,229);
+  doc.rect(margin, y, pageW-margin*2, HEADER_H, 'F');
+  doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(146,97,74);
+
+  let cx = margin+2;
+  // Nom
+  doc.text('ELEVE', cx, y+9);
+  cx += colWNom;
+  // Note globale
+  doc.setFillColor(124,58,237); doc.rect(cx-1, y+1, colWGlob, HEADER_H-2, 'F');
+  doc.setTextColor(255,255,255);
+  doc.text('NOTE', cx+colWGlob/2-1, y+6, {align:'center'});
+  doc.text('GLOBALE', cx+colWGlob/2-1, y+11, {align:'center'});
+  cx += colWGlob;
+  // Projets
+  tousLesProjets.forEach((proj, pi) => {
+    const bg = pi%2===0 ? [29,78,216] : [37,99,235];
+    doc.setFillColor(...bg); doc.rect(cx-1, y+1, colWProj, HEADER_H-2, 'F');
+    doc.setTextColor(255,255,255);
+    // Tronquer le titre si trop long
+    const maxChars = Math.floor(colWProj / 1.8);
+    const titre = (proj.titre||('Projet '+(pi+1))).substring(0, maxChars);
+    doc.text(titre, cx + colWProj/2 - 1, y+9, {align:'center'});
+    cx += colWProj;
+  });
+  // Comportement
+  doc.setFillColor(255,107,53); doc.rect(cx-1, y+1, colWComport, HEADER_H-2, 'F');
+  doc.setTextColor(255,255,255);
+  doc.text('COMP.', cx+colWComport/2-1, y+9, {align:'center'});
+
+  y += HEADER_H + 1;
   doc.setDrawColor(253,220,202); doc.setLineWidth(0.3);
   doc.line(margin, y, pageW-margin, y);
-  y += 2;
+  y += 1;
 
-  // Lignes élèves
-  rows.forEach((r,idx)=>{
-    if(y > 270){ doc.addPage(); y=margin; }
-    if(idx%2===0){ doc.setFillColor(255,253,249); doc.rect(margin, y-1, pageW-margin*2, 9, 'F'); }
+  // Note globale : note globale est la note "prof" = top3avg de TOUTES les compétences
+  // Légende note globale = top3avg toutes compétences prof
+  doc.setFont('helvetica','normal'); doc.setFontSize(6); doc.setTextColor(180,120,80);
+  doc.text('Note globale = top3avg de toutes les competences prof, tous projets confondus', margin, y+4);
+  y += 6;
+
+  // ── Lignes élèves ──
+  rows.forEach((r, idx) => {
+    if(y + ROW_H > pageH - 12){ doc.addPage(); y = margin; }
+
+    // Fond alterné
+    if(idx%2===0){ doc.setFillColor(255,253,250); doc.rect(margin, y, pageW-margin*2, ROW_H, 'F'); }
+
     cx = margin+2;
+
+    // Nom
     doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(45,26,14);
-    doc.text(r.nom, cx, y+5); cx+=colW[0];
-    doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(194,65,12);
-    doc.text(r.level.lbl||'--', cx, y+5); cx+=colW[1];
-    // Barre progression
-    doc.setFillColor(253,220,202); doc.roundedRect(cx, y+2, 30, 3, 1, 1, 'F');
-    if(r.pct>0){ doc.setFillColor(255,107,53); doc.roundedRect(cx, y+2, 30*r.pct/100, 3, 1, 1, 'F'); }
-    doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(255,107,53);
-    doc.text(r.pct+'%', cx+32, y+5); cx+=colW[2];
-    doc.setTextColor(29,78,216);
-    doc.text(r.noteProj!==null?String(r.noteProj)+'/10':'--', cx, y+5); cx+=colW[3];
-    doc.setTextColor(107,33,168);
-    doc.text(r.noteTransv!==null?String(r.noteTransv)+'/10':'--', cx, y+5); cx+=colW[4];
-    doc.setTextColor(45,26,14);
-    doc.text(r.topSmileys.length?r.topSmileys.join(' '):'--', cx, y+5);
-    y += 9;
-    doc.setDrawColor(255,243,230); doc.line(margin, y-1, pageW-margin, y-1);
+    doc.text(r.nom, cx, y+6);
+    cx += colWNom;
+
+    // Note globale — chip violet
+    const ng = r.noteGlobale;
+    if(ng !== null){
+      const ngStr = ng.toFixed(1);
+      const chipW = 16; const chipH = 5;
+      const ngColor = ng >= 7 ? [5,150,105] : ng >= 5 ? [234,88,12] : [220,38,38];
+      doc.setFillColor(...ngColor);
+      doc.roundedRect(cx+1, y+2, chipW, chipH, 1.5, 1.5, 'F');
+      doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(255,255,255);
+      doc.text(ngStr+'/10', cx+1+chipW/2, y+6, {align:'center'});
+    } else {
+      doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(180,180,180);
+      doc.text('—', cx+colWGlob/2, y+6, {align:'center'});
+    }
+    cx += colWGlob;
+
+    // Notes projets
+    r.notesProjets.forEach((np, pi) => {
+      if(np !== null){
+        const npStr = np.toFixed(1);
+        const chipW = Math.min(colWProj-4, 16); const chipH = 5;
+        const npColor = np >= 7 ? [5,150,105] : np >= 5 ? [234,88,12] : [220,38,38];
+        doc.setFillColor(...npColor);
+        doc.roundedRect(cx+1, y+2, chipW, chipH, 1.5, 1.5, 'F');
+        doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(255,255,255);
+        doc.text(npStr+'/10', cx+1+chipW/2, y+6, {align:'center'});
+      } else {
+        doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(180,180,180);
+        doc.text('—', cx+colWProj/2, y+6, {align:'center'});
+      }
+      cx += colWProj;
+    });
+
+    // Comportement dominant (smiley)
+    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(45,26,14);
+    doc.text(r.smileyDominant || '—', cx+colWComport/2, y+6, {align:'center'});
+
+    y += ROW_H;
+    doc.setDrawColor(255,243,230); doc.setLineWidth(0.2);
+    doc.line(margin, y, pageW-margin, y);
   });
 
   // Footer
-  y += 4;
-  doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(200,200,200);
-  doc.text('Genere par LevelUp - '+today, pageW/2, y, {align:'center'});
+  y += 5;
+  if(y > pageH - 8){ doc.addPage(); y = margin; }
+  doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(200,200,200);
+  doc.text('Genere par LevelUp — '+today, pageW/2, y, {align:'center'});
 
   doc.save('recap-'+classeCode+'-'+mat+'-'+periode+'.pdf');
   if(btn){btn.textContent='✅ Telecharge !';setTimeout(()=>{btn.textContent='📄 Télécharger le récapitulatif';btn.disabled=false;},2000);}
