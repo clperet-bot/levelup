@@ -5977,8 +5977,10 @@ async function lancerGenerationAppreciations(){
       const hist = scoresToHist(scoresFilt);
       const histProf = scoresToHist(evalsFilt);
       const allItemIds = proj ? proj.itemIds : [];
-      const pct = allItemIds.length ? calcXPPct(allItemIds, hist, proj?.createdAt||proj?.created_at||'1970-01-01', elv?.id) : 0;
-      const level = getXPLevel(pct);
+      const xpElv2  = allItemIds.length ? calcXPPct(allItemIds, hist,     proj?.createdAt||proj?.created_at||'1970-01-01', elv?.id) : {pct:0};
+      const xpProf2 = allItemIds.length ? calcXPPct(allItemIds, histProf, proj?.createdAt||proj?.created_at||'1970-01-01', elv?.id) : {pct:0};
+      const pct = Math.max(xpElv2.pct, xpProf2.pct);
+      const level = XP_LEVELS.find(l=>pct<=l.max)||XP_LEVELS[XP_LEVELS.length-1];
       const noteProj = proj ? (() => { const vals=proj.itemIds.map(id=>bestVal(hist[id])).filter(v=>v!==null); return vals.length?top3avg(vals):null; })() : null;
       const noteTransv = transvScoreProf(mat, histProf);
       const comportCounts = {};
@@ -6112,7 +6114,7 @@ async function genererRecapPDF(){
       const xpElv  = calcXPPct(allItemIds, hist,     proj?.createdAt||proj?.created_at||'1970-01-01', elv?.id);
       const xpProf = calcXPPct(allItemIds, histProf, proj?.createdAt||proj?.created_at||'1970-01-01', elv?.id);
       const pct = allItemIds.length ? Math.max(xpElv.pct, xpProf.pct) : 0;
-      const level = getXPLevel(pct);
+      const level = XP_LEVELS.find(l=>pct<=l.max)||XP_LEVELS[XP_LEVELS.length-1];
       const noteProj=proj?(()=>{
         // Utiliser les notes prof en priorité, sinon élève
         const vals=proj.itemIds.map(id=>{
