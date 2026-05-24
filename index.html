@@ -1087,7 +1087,6 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);font
     <div><div class="hdr-t" id="eval-cls-title"></div><div class="hdr-s">Évaluation prof</div></div>
     <button class="back" onclick="switchProfTab('eval');goTo('sc-prof')">← Retour</button>
   </div>
-  <div class="sec-title">Élèves</div>
   <div id="eval-elv-list"></div>
   <div style="height:80px"></div>
 </div>
@@ -4378,6 +4377,20 @@ async function openDetail(eleveId,nom,code){
     setTimeout(()=>openDetail(eleveId,nom,code), 800);
   };
   cont.appendChild(resetBtn);
+  // Bouton réinitialiser éval prof uniquement
+  const resetProfBtn=document.createElement('button');
+  resetProfBtn.className='btn-reset';
+  resetProfBtn.style.cssText='opacity:.6;font-size:.78rem;';
+  resetProfBtn.textContent='🔄 Réinitialiser les évaluations prof';
+  resetProfBtn.onclick=async()=>{
+    if(!confirm('Effacer TOUTES les évaluations prof de '+nom+' ?\n\nLes auto-évaluations de l\'élève sont conservées.\n\nContinuer ?')) return;
+    resetProfBtn.textContent='⏳ Réinitialisation...';
+    resetProfBtn.disabled=true;
+    await sbFetch('eval_prof?eleve_id=eq.'+eleveId, {method:'DELETE'});
+    resetProfBtn.textContent='✅ Réinitialisé !';
+    setTimeout(()=>openDetail(eleveId,nom,code), 800);
+  };
+  cont.appendChild(resetProfBtn);
   for(const mat of ['fr','en']){
     const m=DATA[mat];
     const scores=await getScores(eleveId,mat);
@@ -5124,7 +5137,7 @@ async function saveEvalProf(){
         SE.returnFn = null;
         await fn();
       } else {
-        openEvalClasse(SE.code);
+        goTo('sc-prof'); switchProfTab('eval'); await renderEvalClasses();
       }
     }, 800);
   }catch(e){
