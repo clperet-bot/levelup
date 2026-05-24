@@ -3113,19 +3113,26 @@ async function renderActivitesEleve(proj){
       btn.textContent=l;
       btn.onclick=async(e)=>{
         e.stopPropagation();
-        const nowSel=(modeMap[actKey]||new Set()).has(k);
-        const newMode=nowSel?null:k;
-        await saveActMode(S.user.id, proj.id, actKey, newMode);
-        if(newMode) await toggleActiviteDoneDB(S.user.id, proj.id, actKey, true);
-        modeMap[actKey]=newMode;
+        const curSet = modeMap[actKey] instanceof Set ? modeMap[actKey] : new Set();
+        const nowSel = curSet.has(k);
+        if(nowSel){
+          await deleteActMode(S.user.id, proj.id, actKey);
+          modeMap[actKey] = new Set();
+        } else {
+          await deleteActMode(S.user.id, proj.id, actKey);
+          await saveActMode(S.user.id, proj.id, actKey, k);
+          if(true) await toggleActiviteDoneDB(S.user.id, proj.id, actKey, true);
+          modeMap[actKey] = new Set([k]);
+        }
+        const newSet = modeMap[actKey];
         modeBtns.querySelectorAll('button').forEach((b,i)=>{
           const bk=['oral','ecrit','interaction'][i];
-          const bsel=newMode===bk;
+          const bsel=newSet.has(bk);
           b.style.border='1.5px solid '+(bsel?'#16a34a':'#d1d5db');
           b.style.background=bsel?'#dcfce7':'#fff';
           b.style.color=bsel?'#15803d':'var(--text)';
         });
-        row.style.borderColor=newMode?'#16a34a':'#e2e8f0';
+        row.style.borderColor=newSet.size?'#16a34a':'#e2e8f0';
       };
       modeBtns.appendChild(btn);
     });
@@ -7005,13 +7012,22 @@ async function openProjetEleve(proj){
         btn.textContent=l;
         btn.onclick=async(e)=>{
           e.stopPropagation();
-          const nowSel=(modeMap[actKey]||new Set()).has(k);
-          const newMode=nowSel?null:k;
-          await saveActMode(S.user.id, proj.id, actKey, newMode);
-          modeMap[actKey]=newMode;
+          const curSet = modeMap[actKey] instanceof Set ? modeMap[actKey] : new Set();
+          const nowSel = curSet.has(k);
+          if(nowSel){
+            // Désélectionner
+            await deleteActMode(S.user.id, proj.id, actKey);
+            modeMap[actKey] = new Set();
+          } else {
+            // Sélectionner (remplace l'ancien)
+            await deleteActMode(S.user.id, proj.id, actKey);
+            await saveActMode(S.user.id, proj.id, actKey, k);
+            modeMap[actKey] = new Set([k]);
+          }
+          const newSet = modeMap[actKey];
           modeBtns.querySelectorAll('button').forEach((b,i)=>{
             const bk=['oral','ecrit','interaction'][i];
-            const bsel=newMode===bk;
+            const bsel=newSet.has(bk);
             b.style.border='1.5px solid '+(bsel?'#16a34a':'#bbf7d0');
             b.style.background=bsel?'#16a34a':'#fff';
             b.style.color=bsel?'#fff':'#15803d';
