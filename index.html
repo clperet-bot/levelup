@@ -2799,9 +2799,16 @@ async function saveItems(){
   const btn = document.querySelector('.save-btn');
   btn.textContent='⏳ Enregistrement...'; btn.disabled=true;
   try {
-    // Save scores
+    // Save scores — seulement si la valeur a changé par rapport à la dernière entrée
+    const scores = await getScores(S.user.id, S.mat);
+    const hist = scoresToHist(scores);
     const promises = Object.entries(S.temp)
-      .filter(([id,val])=>val!==null)
+      .filter(([id,val])=>{
+        if(val===null) return false;
+        const last = hist[id];
+        const lastVal = last&&last.length ? last[last.length-1].val : null;
+        return val !== lastVal;
+      })
       .map(([id,val])=>addScore(S.user.id, S.mat, id, val));
     await Promise.all(promises);
     // Save comment
@@ -6881,10 +6888,12 @@ async function renderProjElvTile(){
 // ── CÔTÉ ÉLÈVE : ouvrir un projet et s'auto-évaluer ──
 let _projActuel = null;
 let _projTemp = {};
+let _projTempInit = {}; // valeurs initiales au chargement, pour détecter les changements
 
 async function openProjetEleve(proj){
   _projActuel = proj;
   _projTemp = {};
+  _projTempInit = {};
   // Marquer comme vu + rafraîchir la tuile en arrière-plan (retire le badge NOUVEAU)
   markProjectOpened(proj.id).then(()=> renderProjElvTile());
   document.getElementById('proj-titre').textContent = proj.titre;
@@ -6926,6 +6935,7 @@ async function openProjetEleve(proj){
     const lastAll = ihAll.length ? ihAll[ihAll.length-1].val : null;
     const lastVal = lastFiltered !== null ? lastFiltered : lastAll;
     _projTemp[itemId] = lastVal;
+    _projTempInit[itemId] = lastVal;
 
     const circles = [0,1,2,3,4].map(v=>`<button class="circle${_projTemp[itemId]===v?' s'+v:''}" data-id="${itemId}" data-v="${v}" onclick="setProjScore('${itemId}',${v})"></button>`).join('');
 
@@ -7166,7 +7176,10 @@ async function saveProjItems(){
   btn.textContent='⏳ Enregistrement...'; btn.disabled=true;
   try{
     const promises = Object.entries(_projTemp)
-      .filter(([id,val])=>val!==null)
+      .filter(([id,val])=>{
+        if(val===null) return false;
+        return val !== _projTempInit[id]; // n'enregistre que si changé
+      })
       .map(([id,val])=>addScore(S.user.id, _projActuel.mat, id, val));
     // Sauvegarder le commentaire si rempli
     const cmtInput = document.getElementById('proj-cmt-input');
