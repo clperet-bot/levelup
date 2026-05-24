@@ -4275,7 +4275,7 @@ async function _renderConsultEleve(cont, eleveId, nom, code, reopenId){
     resetProfBtn.textContent='⏳ Réinitialisation...'; resetProfBtn.disabled=true;
     await sbFetch('eval_prof?eleve_id=eq.'+eleveId, {method:'DELETE', prefer:'return=minimal'});
     resetProfBtn.textContent='✅ Réinitialisé !';
-    setTimeout(()=>openDetail(eleveId, nom, code), 800);
+    setTimeout(()=>openConsultEleve(eleveId, nom, code), 800);
   };
   cont.appendChild(resetProfBtn);
 }
