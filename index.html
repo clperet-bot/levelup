@@ -6573,6 +6573,16 @@ async function sauvegarderProjet(){
   if(_editProjId){
     await updateProjetDB(_editProjId, {titre, mat, classe, itemIds});
     _projetsCache = null;
+    // Sauvegarder les activités modifiées
+    const editActs = [...(window._projActivites||[])];
+    const editBank = await getActivitesBank();
+    (window._projActIds||[]).forEach(id=>{
+      if(!editActs.find(a=>a.id===id)){
+        const ba=editBank.find(b=>b.id===id);
+        if(ba) editActs.push({id:ba.id, titre:ba.titre, compIds:[]});
+      }
+    });
+    await saveActivitesProjet(_editProjId, editActs);
     msg.style.color='var(--green)';
     msg.textContent='✅ Projet modifié !';
     setTimeout(()=>{ goTo('sc-prof'); switchProfTab('adm'); switchAdmTab('projets'); }, 900);
