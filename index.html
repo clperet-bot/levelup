@@ -6091,17 +6091,17 @@ async function genererRecapPDF(){
   let eleves = [], classes = [];
   try {
     [eleves, classes] = await Promise.all([getElevesOfClasse(classeCode), getClasses()]);
-  } catch(e) { alert('Erreur: '+e.message); if(btn){btn.textContent='📄 Télécharger';btn.disabled=false;} return; }
+  } catch(e){ alert('Erreur: '+e.message); if(btn){btn.textContent='📄 Télécharger';btn.disabled=false;} return; }
   if(!eleves.length){ alert('Aucun élève dans cette classe.'); if(btn){btn.textContent='📄 Télécharger';btn.disabled=false;} return; }
 
   const {debut, fin} = getPeriodeDates(classes, classeCode, periode);
 
-  // Récupérer TOUS les projets de la classe (triés par date)
+  // Tous les projets de la classe, triés par date
   const tousLesProjets = (await getProjets())
     .filter(p => p.mat === mat && p.classe === classeCode)
     .sort((a,b) => (a.createdAt||'').localeCompare(b.createdAt||''));
 
-  // Construire les données par élève
+  // Collecter les données par élève
   const rows = [];
   for(let i=0;i<eleves.length;i++){
     const elv = eleves[i];
@@ -6113,189 +6113,142 @@ async function genererRecapPDF(){
       ]);
       const evalsFilt   = filterByPeriode(evalProfRows, debut, fin);
       const comportFilt = filterByPeriode(comportRows, debut, fin);
-      const histProf = scoresToHist(evalsFilt);
+      const histProf    = scoresToHist(evalsFilt);
 
-      // Note globale prof : top3avg de TOUTES les compétences évaluées
+      // Note globale : top3avg de toutes les compétences prof évaluées
       const noteGlobale = globalScore(mat, histProf);
 
-      // Note par projet : top3avg des items du projet (notes prof uniquement)
+      // Note par projet (top3avg des items du projet, notes prof)
       const notesProjets = tousLesProjets.map(proj => {
-        const vals = (proj.itemIds||[])
-          .map(id => bestVal(histProf[id]))
-          .filter(v => v !== null);
+        const vals = (proj.itemIds||[]).map(id=>bestVal(histProf[id])).filter(v=>v!==null);
         return vals.length ? top3avg(vals) : null;
       });
 
-      // Comportement dominant : smiley le plus fréquent
+      // Comportement : smiley le plus fréquent
       const cc = {};
-      comportFilt.forEach(r => (r.smileys||[]).forEach(s => { cc[s]=(cc[s]||0)+1; }));
-      const smileyDominant = Object.entries(cc).sort((a,b)=>b[1]-a[1])[0]?.[0] || null;
+      comportFilt.forEach(r=>(r.smileys||[]).forEach(s=>{ cc[s]=(cc[s]||0)+1; }));
+      const sorted = Object.entries(cc).sort((a,b)=>b[1]-a[1]);
+      // Garder tous les smileys à égalité au top
+      const topCount = sorted[0]?.[1] || 0;
+      const topSmileys = topCount > 0 ? sorted.filter(([,v])=>v===topCount).map(([s])=>s) : [];
 
-      rows.push({ nom: formatNomAffichage(elv.nom), noteGlobale, notesProjets, smileyDominant });
-    } catch(e) {
-      rows.push({ nom: formatNomAffichage(elv.nom), noteGlobale: null, notesProjets: tousLesProjets.map(()=>null), smileyDominant: null });
+      rows.push({ nom: formatNomAffichage(elv.nom), noteGlobale, notesProjets, topSmileys });
+    } catch(e){
+      rows.push({ nom: formatNomAffichage(elv.nom), noteGlobale: null, notesProjets: tousLesProjets.map(()=>null), topSmileys: [] });
     }
   }
 
-  // Trier par note globale décroissante
-  rows.sort((a,b) => {
+  // Tri par note globale décroissante (non notés en bas)
+  rows.sort((a,b)=>{
     if(a.noteGlobale===null && b.noteGlobale===null) return 0;
     if(a.noteGlobale===null) return 1;
     if(b.noteGlobale===null) return -1;
     return b.noteGlobale - a.noteGlobale;
   });
 
-  // ── Génération PDF ──
-  // Calcul orientation selon nb de colonnes
-  const nbProjCols = tousLesProjets.length;
-  const totalCols = 2 + nbProjCols + 1; // Nom + NoteGlob + projets + Comport.
-  const usePortrait = nbProjCols <= 3;
-  const {jsPDF} = window.jspdf;
-  const doc = new jsPDF({ orientation: usePortrait ? 'portrait' : 'landscape', unit:'mm', format:'a4' });
-  const pageW = doc.internal.pageSize.getWidth();
-  const pageH = doc.internal.pageSize.getHeight();
-  const margin = 14;
-  let y = margin;
+  // ── Helper : chip HTML coloré ──
+  function noteChip(val){
+    if(val === null) return '<span style="color:#94a3b8;font-size:13px;">—</span>';
+    const n = Math.round(val * 10) / 10;
+    const color = n >= 7 ? '#059669' : n >= 5 ? '#ea580c' : '#dc2626';
+    return `<span style="display:inline-block;background:${color};color:#fff;border-radius:6px;padding:3px 9px;font-size:12px;font-weight:800;font-family:'Segoe UI',sans-serif;">${n}/10</span>`;
+  }
 
-  // ── En-tête ──
-  doc.setFont('helvetica','bold');
-  doc.setFontSize(18);
-  doc.setTextColor(245,158,11); doc.text('Level', margin, y);
-  const levelW = doc.getTextWidth('Level');
-  doc.setTextColor(255,107,53); doc.text('Up', margin+levelW, y);
-  doc.setTextColor(45,26,14);
-  doc.setFontSize(13);
-  doc.text('Recapitulatif — '+classeCode, margin+levelW+doc.getTextWidth('Up')+5, y);
-  y += 6;
-  doc.setFont('helvetica','normal'); doc.setFontSize(8); doc.setTextColor(146,97,74);
-  const matTxt = mat==='fr'?'Francais':'Anglais';
-  const periodeTxt = periode==='s1'?'Semestre 1':periode==='s2'?'Semestre 2':'Fin d\'annee';
-  const dateTxt = debut&&fin?' ('+debut+' > '+fin+')':'';
-  doc.text(matTxt+' — '+periodeTxt+dateTxt+' — '+today, margin, y);
-  y += 5;
+  // ── Construire le HTML du tableau ──
+  const matLabel  = mat==='fr' ? 'Français' : 'Anglais';
+  const periLabel = periode==='s1' ? 'Semestre 1' : periode==='s2' ? 'Semestre 2' : "Fin d'année";
+  const periInfo  = debut&&fin ? ` (${debut} → ${fin})` : '';
 
-  // Ligne orange
-  doc.setDrawColor(255,107,53); doc.setLineWidth(0.7);
-  doc.line(margin, y, pageW-margin, y);
-  y += 7;
+  const projHeaders = tousLesProjets.map(p =>
+    `<th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:700;letter-spacing:.5px;color:#fff;background:#3b82f6;border-right:1px solid rgba(255,255,255,.2);white-space:nowrap;">${(p.titre||'Projet').toUpperCase()}</th>`
+  ).join('');
 
-  // ── Calcul largeurs colonnes ──
-  const colWNom = 46;
-  const colWGlob = 22;
-  const colWComport = 18;
-  const colWProjBase = 4; // minimum
-  const projZoneW = pageW - margin*2 - colWNom - colWGlob - colWComport;
-  const colWProj = nbProjCols > 0 ? Math.max(colWProjBase, Math.floor(projZoneW / nbProjCols)) : 0;
+  const lignes = rows.map((r, idx) => {
+    const bg = idx%2===0 ? '#ffffff' : '#f8f7ff';
+    const projCells = r.notesProjets.map(np =>
+      `<td style="padding:10px 14px;text-align:center;background:${bg};border-bottom:1px solid #ede9fe;">${noteChip(np)}</td>`
+    ).join('');
+    // Colonne GLOBAL fond violet clair
+    const globalBg = idx%2===0 ? '#ede9fe' : '#e5e0fc';
+    const globalCell = `<td style="padding:10px 14px;text-align:center;background:${globalBg};border-bottom:1px solid #ede9fe;font-weight:900;font-size:14px;color:#5b21b6;">${r.noteGlobale!==null ? (Math.round(r.noteGlobale*10)/10) : '<span style="color:#94a3b8;">—</span>'}</td>`;
+    const attCell = `<td style="padding:10px 14px;text-align:center;background:${bg};border-bottom:1px solid #ede9fe;font-size:18px;">${r.topSmileys.length ? r.topSmileys.join(' ') : '—'}</td>`;
+    return `<tr>
+      <td style="padding:10px 16px;font-weight:700;font-size:13px;color:#1e293b;background:${bg};border-bottom:1px solid #ede9fe;">${r.nom}</td>
+      ${projCells}
+      ${globalCell}
+      ${attCell}
+    </tr>`;
+  }).join('');
 
-  // En-têtes colonnes
-  const ROW_H = 9;
-  const HEADER_H = 14; // double hauteur pour les titres projets longs
+  const tableHTML = `
+  <div style="font-family:'Segoe UI',Arial,sans-serif;background:#fff;width:900px;padding:0;margin:0;">
+    <!-- Header violet -->
+    <div style="background:linear-gradient(135deg,#6d28d9,#7c3aed);border-radius:12px 12px 0 0;padding:18px 24px 14px;">
+      <div style="color:#fff;font-size:20px;font-weight:800;letter-spacing:-.3px;">Récapitulatif — ${classeCode}</div>
+      <div style="color:rgba(255,255,255,.75);font-size:12px;margin-top:4px;">${matLabel} · ${periLabel}${periInfo} · ${today}</div>
+    </div>
+    <!-- Tableau -->
+    <table style="width:100%;border-collapse:collapse;table-layout:fixed;">
+      <colgroup>
+        <col style="width:200px;">
+        ${tousLesProjets.map(()=>'<col>').join('')}
+        <col style="width:90px;">
+        <col style="width:90px;">
+      </colgroup>
+      <thead>
+        <tr>
+          <th style="padding:10px 16px;text-align:left;font-size:11px;font-weight:700;letter-spacing:.5px;color:#7c3aed;background:#f5f3ff;border-right:1px solid #ede9fe;">ÉLÈVE</th>
+          ${projHeaders}
+          <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:700;letter-spacing:.5px;color:#fff;background:#6d28d9;border-right:1px solid rgba(255,255,255,.2);">GLOBAL</th>
+          <th style="padding:10px 14px;text-align:center;font-size:11px;font-weight:700;letter-spacing:.5px;color:#fff;background:#7c3aed;">ATTITUDE</th>
+        </tr>
+      </thead>
+      <tbody>${lignes}</tbody>
+    </table>
+    <!-- Légende -->
+    <div style="padding:10px 16px 14px;font-size:11px;color:#94a3b8;border-top:1px solid #f1f5f9;">
+      Note globale = top 3 des meilleures compétences prof, tous projets confondus
+    </div>
+  </div>`;
 
-  doc.setFillColor(255,242,229);
-  doc.rect(margin, y, pageW-margin*2, HEADER_H, 'F');
-  doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(146,97,74);
+  // ── Rendre dans un div hors-écran, capturer avec html2canvas ──
+  const wrapper = document.createElement('div');
+  wrapper.style.cssText = 'position:fixed;left:-9999px;top:0;z-index:-1;background:#fff;';
+  wrapper.innerHTML = tableHTML;
+  document.body.appendChild(wrapper);
 
-  let cx = margin+2;
-  // Nom
-  doc.text('ELEVE', cx, y+9);
-  cx += colWNom;
-  // Note globale
-  doc.setFillColor(124,58,237); doc.rect(cx-1, y+1, colWGlob, HEADER_H-2, 'F');
-  doc.setTextColor(255,255,255);
-  doc.text('NOTE', cx+colWGlob/2-1, y+6, {align:'center'});
-  doc.text('GLOBALE', cx+colWGlob/2-1, y+11, {align:'center'});
-  cx += colWGlob;
-  // Projets
-  tousLesProjets.forEach((proj, pi) => {
-    const bg = pi%2===0 ? [29,78,216] : [37,99,235];
-    doc.setFillColor(...bg); doc.rect(cx-1, y+1, colWProj, HEADER_H-2, 'F');
-    doc.setTextColor(255,255,255);
-    // Tronquer le titre si trop long
-    const maxChars = Math.floor(colWProj / 1.8);
-    const titre = (proj.titre||('Projet '+(pi+1))).substring(0, maxChars);
-    doc.text(titre, cx + colWProj/2 - 1, y+9, {align:'center'});
-    cx += colWProj;
-  });
-  // Comportement
-  doc.setFillColor(255,107,53); doc.rect(cx-1, y+1, colWComport, HEADER_H-2, 'F');
-  doc.setTextColor(255,255,255);
-  doc.text('COMP.', cx+colWComport/2-1, y+9, {align:'center'});
+  if(btn) btn.textContent='⏳ Génération du PDF...';
 
-  y += HEADER_H + 1;
-  doc.setDrawColor(253,220,202); doc.setLineWidth(0.3);
-  doc.line(margin, y, pageW-margin, y);
-  y += 1;
-
-  // Note globale : note globale est la note "prof" = top3avg de TOUTES les compétences
-  // Légende note globale = top3avg toutes compétences prof
-  doc.setFont('helvetica','normal'); doc.setFontSize(6); doc.setTextColor(180,120,80);
-  doc.text('Note globale = top3avg de toutes les competences prof, tous projets confondus', margin, y+4);
-  y += 6;
-
-  // ── Lignes élèves ──
-  rows.forEach((r, idx) => {
-    if(y + ROW_H > pageH - 12){ doc.addPage(); y = margin; }
-
-    // Fond alterné
-    if(idx%2===0){ doc.setFillColor(255,253,250); doc.rect(margin, y, pageW-margin*2, ROW_H, 'F'); }
-
-    cx = margin+2;
-
-    // Nom
-    doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(45,26,14);
-    doc.text(r.nom, cx, y+6);
-    cx += colWNom;
-
-    // Note globale — chip violet
-    const ng = r.noteGlobale;
-    if(ng !== null){
-      const ngStr = ng.toFixed(1);
-      const chipW = 16; const chipH = 5;
-      const ngColor = ng >= 7 ? [5,150,105] : ng >= 5 ? [234,88,12] : [220,38,38];
-      doc.setFillColor(...ngColor);
-      doc.roundedRect(cx+1, y+2, chipW, chipH, 1.5, 1.5, 'F');
-      doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(255,255,255);
-      doc.text(ngStr+'/10', cx+1+chipW/2, y+6, {align:'center'});
-    } else {
-      doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(180,180,180);
-      doc.text('—', cx+colWGlob/2, y+6, {align:'center'});
-    }
-    cx += colWGlob;
-
-    // Notes projets
-    r.notesProjets.forEach((np, pi) => {
-      if(np !== null){
-        const npStr = np.toFixed(1);
-        const chipW = Math.min(colWProj-4, 16); const chipH = 5;
-        const npColor = np >= 7 ? [5,150,105] : np >= 5 ? [234,88,12] : [220,38,38];
-        doc.setFillColor(...npColor);
-        doc.roundedRect(cx+1, y+2, chipW, chipH, 1.5, 1.5, 'F');
-        doc.setFont('helvetica','bold'); doc.setFontSize(7); doc.setTextColor(255,255,255);
-        doc.text(npStr+'/10', cx+1+chipW/2, y+6, {align:'center'});
-      } else {
-        doc.setFont('helvetica','normal'); doc.setFontSize(7); doc.setTextColor(180,180,180);
-        doc.text('—', cx+colWProj/2, y+6, {align:'center'});
-      }
-      cx += colWProj;
+  try {
+    const canvas = await html2canvas(wrapper.firstElementChild, {
+      scale: 2,
+      useCORS: true,
+      backgroundColor: '#ffffff',
+      logging: false
     });
 
-    // Comportement dominant (smiley)
-    doc.setFont('helvetica','normal'); doc.setFontSize(9); doc.setTextColor(45,26,14);
-    doc.text(r.smileyDominant || '—', cx+colWComport/2, y+6, {align:'center'});
+    const imgData = canvas.toDataURL('image/png');
+    const {jsPDF} = window.jspdf;
 
-    y += ROW_H;
-    doc.setDrawColor(255,243,230); doc.setLineWidth(0.2);
-    doc.line(margin, y, pageW-margin, y);
-  });
+    // Calcul dimensions : largeur fixe A4, hauteur proportionnelle
+    const pdfW = 210; // mm A4 portrait
+    const pdfMargin = 10;
+    const imgW = pdfW - pdfMargin * 2;
+    const imgH = (canvas.height / canvas.width) * imgW;
 
-  // Footer
-  y += 5;
-  if(y > pageH - 8){ doc.addPage(); y = margin; }
-  doc.setFont('helvetica','normal'); doc.setFontSize(6.5); doc.setTextColor(200,200,200);
-  doc.text('Genere par LevelUp — '+today, pageW/2, y, {align:'center'});
+    // Si > une page, utiliser format adapté
+    const pageH = Math.max(297, imgH + pdfMargin * 2);
+    const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pdfW, pageH] });
+    doc.addImage(imgData, 'PNG', pdfMargin, pdfMargin, imgW, imgH);
+    doc.save('recap-'+classeCode+'-'+mat+'-'+periode+'.pdf');
 
-  doc.save('recap-'+classeCode+'-'+mat+'-'+periode+'.pdf');
-  if(btn){btn.textContent='✅ Telecharge !';setTimeout(()=>{btn.textContent='📄 Télécharger le récapitulatif';btn.disabled=false;},2000);}
+    if(btn){ btn.textContent='✅ Téléchargé !'; setTimeout(()=>{ btn.textContent='📄 Télécharger le récapitulatif'; btn.disabled=false; }, 2000); }
+  } catch(e){
+    alert('Erreur génération PDF : '+e.message);
+    if(btn){ btn.textContent='📄 Télécharger le récapitulatif'; btn.disabled=false; }
+  } finally {
+    document.body.removeChild(wrapper);
+  }
 }
 async function renderAdminProjets(){
   const cont = document.getElementById('adm-projets');
