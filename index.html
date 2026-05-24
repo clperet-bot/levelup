@@ -4265,6 +4265,19 @@ async function _renderConsultEleve(cont, eleveId, nom, code, reopenId){
   resetBtn.textContent='🗑️ Réinitialiser les auto-évaluations';
   resetBtn.onclick = ()=>resetAutoEvals(eleveId, nom, code);
   cont.appendChild(resetBtn);
+
+  // Bouton réinitialisation évaluations prof
+  const resetProfBtn = document.createElement('button');
+  resetProfBtn.style.cssText='width:100%;margin-top:8px;padding:10px;background:#fff3e6;border:1.5px solid #fdba74;border-radius:14px;color:#c2410c;font-family:\'Nunito\',sans-serif;font-weight:700;font-size:.78rem;cursor:pointer;';
+  resetProfBtn.textContent='🔄 Réinitialiser les évaluations prof';
+  resetProfBtn.onclick = async()=>{
+    if(!confirm('Effacer TOUTES les évaluations prof de '+formatNomAffichage(nom)+' ?\nLes auto-évaluations de l\'élève sont conservées.\nIrréversible.')) return;
+    resetProfBtn.textContent='⏳ Réinitialisation...'; resetProfBtn.disabled=true;
+    await sbFetch('eval_prof?eleve_id=eq.'+eleveId, {method:'DELETE', prefer:'return=minimal'});
+    resetProfBtn.textContent='✅ Réinitialisé !';
+    setTimeout(()=>openDetail(eleveId, nom, code), 800);
+  };
+  cont.appendChild(resetProfBtn);
 }
 
 async function resetAutoEvals(eleveId, nom, code){
