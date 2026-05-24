@@ -3320,9 +3320,11 @@ async function openAide(){
 
   // Section projet
   if(proj && proj.itemIds.length){
+    const customComps = await getCustomComps();
     const projItems = proj.itemIds.map(id=>{
       let label=id;
       for(const cat of DATA[S.mat].categories){ const it=cat.items.find(i=>i.id===id); if(it){label=it.l;break;} }
+      if(label===id){ const c=customComps.find(c=>c.id===id); if(c) label=c.label; }
       return {id, label};
     });
     buildSection('Compétences du projet — '+proj.titre, '📁', projItems);
