@@ -1,3 +1,17 @@
+<!--
+  ╔══════════════════════════════════════════════════════════════╗
+  ║                        LevelUp                              ║
+  ║         Application de suivi pédagogique gamifiée           ║
+  ║                                                             ║
+  ║  © 2026 Clémence Péret — Tous droits réservés              ║
+  ║                                                             ║
+  ║  Ce code source est protégé par le droit d'auteur.         ║
+  ║  Toute reproduction, distribution ou utilisation sans      ║
+  ║  autorisation explicite est interdite.                      ║
+  ║                                                             ║
+  ║  Dépôt légal : 2026                                        ║
+  ╚══════════════════════════════════════════════════════════════╝
+-->
 <!DOCTYPE html>
 <html lang="fr">
 <head>
@@ -714,6 +728,7 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);font
     </div>
   </div>
   <div style="color:#92614a;font-size:.85rem;font-weight:600;margin-top:8px;margin-bottom:24px;">Ta progression, étape par étape</div>
+  <div style="color:#c4a882;font-size:.7rem;font-weight:700;margin-top:-18px;margin-bottom:20px;letter-spacing:.5px;">by Clémence Péret</div>
   <div class="login-card">
     <div class="tabs">
       <button class="tab on" onclick="switchTab('el')">Élève</button>
@@ -744,6 +759,7 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);font
   <button onclick="document.getElementById('modal-legal').style.display='flex'" style="margin-top:20px;background:none;border:none;color:#b45309;font-family:'Nunito',sans-serif;font-size:.72rem;font-weight:600;cursor:pointer;text-decoration:underline;opacity:.7;">
     Mentions légales & protection des données
   </button>
+  <div style="margin-top:12px;color:#d4b896;font-size:.65rem;font-weight:600;text-align:center;opacity:.8;">© 2026 Clémence Péret — Tous droits réservés</div>
 </div>
 
 <!-- MODAL MENTIONS LÉGALES -->
@@ -2153,7 +2169,7 @@ async function afficherEvalRapideEleves(item, mat, classeCode, proj){
     // Bouton ✕
     const xBtn = document.createElement('button');
     const xSel = lastRaw === -1;
-    xBtn.style.cssText=`width:28px;height:28px;border-radius:50%;border:2px solid ${xSel?'#dc2626':'#e2e8f0'};background:${xSel?'#dc2626':'transparent'};cursor:pointer;color:${xSel?'#fff':'#dc2626'};font-size:.75rem;font-weight:900;line-height:1;`;
+    xBtn.style.cssText=`width:32px;height:32px;border-radius:50%;border:2.5px solid ${xSel?'#dc2626':'#fca5a5'};background:${xSel?'#dc2626':'#fff5f5'};cursor:pointer;color:${xSel?'#fff':'#dc2626'};font-size:.75rem;font-weight:900;line-height:1;`;
     xBtn.textContent='✕';
     xBtn.onclick=()=>{
       const already = _evalRapideTemp[elv.id] === -1;
@@ -2170,7 +2186,8 @@ async function afficherEvalRapideEleves(item, mat, classeCode, proj){
     [0,1,2,3,4].forEach(v=>{
       const c = document.createElement('button');
       const sel = lastRaw === v;
-      c.style.cssText=`width:28px;height:28px;border-radius:50%;border:2px solid ${sel?COLS[v]:'#e2e8f0'};background:${sel?COLS[v]:'transparent'};cursor:pointer;transition:all .15s;`;
+      const BG_UNSEL = ['#f1f5f9','#dcfce7','#bbf7d0','#4ade80','#166534'];
+      c.style.cssText=`width:32px;height:32px;border-radius:50%;border:2.5px solid ${sel?COLS[v]:'#cbd5e1'};background:${sel?COLS[v]:BG_UNSEL[v]};cursor:pointer;transition:all .15s;`;
       c.title=LABELS[v];
       c.dataset.elv=elv.id; c.dataset.v=v;
       c.onclick=()=>{
@@ -2181,8 +2198,8 @@ async function afficherEvalRapideEleves(item, mat, classeCode, proj){
         xBtn.style.background='transparent'; xBtn.style.borderColor='#e2e8f0'; xBtn.style.color='#dc2626';
         circles.querySelectorAll('button:not(:first-child)').forEach((b,i)=>{
           const bsel = nv!==null && i===nv;
-          b.style.background=bsel?COLS[i]:'transparent';
-          b.style.borderColor=bsel?COLS[i]:'#e2e8f0';
+          b.style.background=bsel?COLS[i]:BG_UNSEL[i];
+          b.style.borderColor=bsel?COLS[i]:'#cbd5e1';
         });
       };
       circles.appendChild(c);
