@@ -1310,6 +1310,30 @@ body{font-family:'Nunito',sans-serif;background:var(--bg);color:var(--text);font
 <!-- Bouton flottant Pouls de classe (prof) -->
 <button id="pouls-btn" onclick="openPoulsClasse()" style="display:none;position:fixed;bottom:72px;right:16px;z-index:999;background:#fff;color:#7c3aed;border:2.5px solid #7c3aed;border-radius:50%;width:48px;height:48px;font-size:1.4rem;cursor:pointer;box-shadow:0 4px 16px rgba(124,58,237,.3);line-height:1;">💜</button>
 
+<!-- Bouton flottant Éval rapide (prof) -->
+<button id="eval-rapide-btn" onclick="openEvalRapide()" style="display:none;position:fixed;bottom:128px;right:16px;z-index:999;background:#fff;color:#16a34a;border:2.5px solid #16a34a;border-radius:50%;width:48px;height:48px;font-size:1.4rem;cursor:pointer;box-shadow:0 4px 16px rgba(22,163,74,.3);line-height:1;">⚡</button>
+
+<!-- MODAL EVAL RAPIDE -->
+<div id="modal-eval-rapide" style="display:none;position:fixed;inset:0;background:rgba(22,163,74,0.12);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);z-index:9998;align-items:flex-end;justify-content:center;padding:16px;pointer-events:none;">
+  <div id="modal-eval-rapide-inner" style="width:100%;max-width:600px;max-height:90vh;overflow-y:auto;scrollbar-width:none;">
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px;">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:1.3rem;">⚡</span>
+        <select id="evalr-mat" style="background:rgba(255,255,255,0.9);border:1px solid #bbf7d0;border-radius:8px;color:#14532d;padding:5px 8px;font-size:.78rem;font-family:'Nunito',sans-serif;outline:none;" onchange="chargerEvalRapide()">
+          <option value="">— Matière —</option>
+          <option value="fr">🇫🇷 Français</option>
+          <option value="en">🇬🇧 Anglais</option>
+        </select>
+        <select id="evalr-classe" style="background:rgba(255,255,255,0.9);border:1px solid #bbf7d0;border-radius:8px;color:#14532d;padding:5px 8px;font-size:.78rem;font-family:'Nunito',sans-serif;outline:none;" onchange="chargerEvalRapide()">
+          <option value="">— Classe —</option>
+        </select>
+      </div>
+      <button onclick="fermerEvalRapide()" style="background:rgba(255,255,255,0.9);border:1px solid #bbf7d0;border-radius:50%;width:28px;height:28px;cursor:pointer;color:#14532d;font-size:.9rem;">✕</button>
+    </div>
+    <div id="evalr-content" style="font-family:'Nunito',sans-serif;"></div>
+  </div>
+</div>
+
 <!-- MODAL POULS DE CLASSE -->
 <style>#modal-pouls-inner::-webkit-scrollbar{display:none;}#modal-pouls-inner{scrollbar-width:none;}</style>
 <div id="modal-pouls" style="display:none;position:fixed;inset:0;background:rgba(124,58,237,0.15);backdrop-filter:blur(12px);-webkit-backdrop-filter:blur(12px);z-index:9998;align-items:flex-end;justify-content:center;padding:16px;pointer-events:none;">
@@ -2018,6 +2042,153 @@ async function renderProfBadges(){
   cont.appendChild(sep);
 }
 
+// ════════════════════════════════════════
+// ÉVAL RAPIDE — bouton ⚡ flottant prof
+// ════════════════════════════════════════
+let _evalRapideTemp = {}; // { eleveId: valeur }
+let _evalRapideComp = null; // { id, label }
+let _evalRapideMat = null;
+let _evalRapideClasse = null;
+
+function fermerEvalRapide(){
+  const m = document.getElementById('modal-eval-rapide');
+  m.style.display = 'none'; m.style.pointerEvents = 'none';
+}
+
+async function openEvalRapide(){
+  const modal = document.getElementById('modal-eval-rapide');
+  modal.style.display = 'flex'; modal.style.pointerEvents = 'auto';
+  _evalRapideTemp = {}; _evalRapideComp = null;
+  const matSel = document.getElementById('evalr-mat');
+  const clsSel = document.getElementById('evalr-classe');
+  if(S.mat) matSel.value = S.mat;
+  const classes = await getClasses();
+  clsSel.innerHTML = '<option value="">— Classe —</option>'
+    + classes.map(c=>`<option value="${c.code}">${c.code}</option>`).join('');
+  if(classes.length === 1){ clsSel.value = classes[0].code; }
+  chargerEvalRapide();
+}
+
+async function chargerEvalRapide(){
+  const mat = document.getElementById('evalr-mat').value;
+  const classeCode = document.getElementById('evalr-classe').value;
+  const cont = document.getElementById('evalr-content');
+  _evalRapideMat = mat; _evalRapideClasse = classeCode;
+  _evalRapideTemp = {}; _evalRapideComp = null;
+  if(!mat || !classeCode){
+    cont.innerHTML='<div style="color:#4b5563;font-size:.85rem;text-align:center;padding:16px;">Sélectionne une matière et une classe.</div>';
+    return;
+  }
+  cont.innerHTML='<div style="text-align:center;padding:16px;">⏳</div>';
+  const proj = await getProjetActif(mat, classeCode);
+  if(!proj || !proj.itemIds.length){
+    cont.innerHTML='<div style="color:#4b5563;font-size:.85rem;text-align:center;padding:16px;">Aucun projet actif pour cette classe.</div>';
+    return;
+  }
+  // Récupérer les labels des compétences
+  const customComps = await getCustomComps();
+  const items = proj.itemIds.map(id=>{
+    let label = id;
+    for(const cat of DATA[mat].categories){ const it=cat.items.find(i=>i.id===id); if(it){label=it.l;break;} }
+    if(label===id){ const c=customComps.find(c=>c.id===id); if(c) label=c.label; }
+    return {id, label};
+  });
+  // Afficher la liste des compétences à choisir
+  cont.innerHTML = '';
+  const titre = document.createElement('div');
+  titre.style.cssText='font-weight:800;font-size:.82rem;color:#14532d;margin-bottom:10px;';
+  titre.textContent='📁 '+proj.titre+' — choisis une compétence :';
+  cont.appendChild(titre);
+  items.forEach(item=>{
+    const btn = document.createElement('button');
+    btn.style.cssText='width:100%;text-align:left;padding:10px 14px;margin-bottom:8px;background:#fff;border:2px solid #bbf7d0;border-radius:12px;font-family:\'Nunito\',sans-serif;font-size:.82rem;font-weight:700;color:#14532d;cursor:pointer;';
+    btn.textContent=item.label;
+    btn.onclick=()=>afficherEvalRapideEleves(item, mat, classeCode, proj);
+    cont.appendChild(btn);
+  });
+}
+
+async function afficherEvalRapideEleves(item, mat, classeCode, proj){
+  _evalRapideComp = item;
+  _evalRapideTemp = {};
+  const cont = document.getElementById('evalr-content');
+  cont.innerHTML='<div style="text-align:center;padding:16px;">⏳</div>';
+  const eleves = await getElevesOfClasse(classeCode);
+  // Récupérer les dernières notes prof pour pré-remplir
+  const histMap = {};
+  await Promise.all(eleves.map(async elv=>{
+    const rows = await getEvalProf(elv.id, mat);
+    const filt = rows.filter(r=> proj.itemIds.includes(r.item_id));
+    histMap[elv.id] = scoresToHist(filt);
+  }));
+  cont.innerHTML='';
+  // Bouton retour
+  const back = document.createElement('button');
+  back.style.cssText='background:none;border:none;color:#16a34a;font-family:\'Nunito\',sans-serif;font-weight:800;font-size:.82rem;cursor:pointer;margin-bottom:12px;padding:0;';
+  back.textContent='← Retour aux compétences';
+  back.onclick=()=>chargerEvalRapide();
+  cont.appendChild(back);
+  const titre = document.createElement('div');
+  titre.style.cssText='font-weight:800;font-size:.8rem;color:#14532d;background:#dcfce7;border-radius:10px;padding:8px 12px;margin-bottom:12px;line-height:1.4;';
+  titre.textContent='⚡ '+item.label;
+  cont.appendChild(titre);
+  const COLS={0:'#e2e8f0',1:'#d4edda',2:'#90ee90',3:'#228b22',4:'#0b5f0b'};
+  const LABELS=['Pas encore','Un peu','Bien','Très bien','Excellent'];
+  eleves.forEach(elv=>{
+    const lastVal = bestVal(histMap[elv.id][item.id]||[]);
+    _evalRapideTemp[elv.id] = lastVal; // pré-rempli avec la dernière valeur
+    const row = document.createElement('div');
+    row.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0fdf4;';
+    const nom = document.createElement('div');
+    nom.style.cssText='flex:1;font-weight:700;font-size:.82rem;color:#1e293b;';
+    nom.textContent=formatNomAffichage(elv.nom);
+    row.appendChild(nom);
+    const circles = document.createElement('div');
+    circles.style.cssText='display:flex;gap:5px;';
+    [0,1,2,3,4].forEach(v=>{
+      const c = document.createElement('button');
+      const sel = lastVal === v;
+      c.style.cssText=`width:28px;height:28px;border-radius:50%;border:2px solid ${sel?COLS[v]:'#e2e8f0'};background:${sel?COLS[v]:'transparent'};cursor:pointer;transition:all .15s;`;
+      c.title=LABELS[v];
+      c.dataset.elv=elv.id; c.dataset.v=v;
+      c.onclick=()=>{
+        _evalRapideTemp[elv.id]=v;
+        circles.querySelectorAll('button').forEach((b,i)=>{
+          const bsel=i===v;
+          b.style.background=bsel?COLS[i]:'transparent';
+          b.style.borderColor=bsel?COLS[i]:'#e2e8f0';
+        });
+      };
+      circles.appendChild(c);
+    });
+    row.appendChild(circles);
+    cont.appendChild(row);
+  });
+  // Bouton enregistrer
+  const saveBtn = document.createElement('button');
+  saveBtn.style.cssText='width:100%;margin-top:16px;padding:12px;background:#16a34a;border:none;border-radius:14px;color:#fff;font-family:\'Nunito\',sans-serif;font-weight:900;font-size:.9rem;cursor:pointer;';
+  saveBtn.textContent='✅ Enregistrer tout';
+  saveBtn.onclick=async()=>{
+    saveBtn.textContent='⏳ Enregistrement...'; saveBtn.disabled=true;
+    // Ne sauvegarder que les valeurs qui ont changé
+    const rows = await Promise.all(eleves.map(async elv=>{
+      const rows = await getEvalProf(elv.id, mat);
+      const hist = scoresToHist(rows.filter(r=>r.item_id===item.id));
+      const lastVal = bestVal(hist[item.id]||[]);
+      return {elv, lastVal};
+    }));
+    await Promise.all(rows.map(({elv, lastVal})=>{
+      const newVal = _evalRapideTemp[elv.id];
+      if(newVal === null || newVal === undefined) return;
+      if(newVal === lastVal) return; // pas changé
+      return addEvalProf(elv.id, mat, item.id, newVal);
+    }));
+    saveBtn.textContent='✅ Enregistré !';
+    setTimeout(()=>fermerEvalRapide(), 1000);
+  };
+  cont.appendChild(saveBtn);
+}
+
 async function openPoulsClasse(){
   const modal = document.getElementById('modal-pouls');
   modal.style.display = 'flex';
@@ -2138,10 +2309,12 @@ function goTo(id){
   }
   // Bouton Pouls de classe — visible pour le prof
   const poulsBtn = document.getElementById('pouls-btn');
+  const evalRapideBtn = document.getElementById('eval-rapide-btn');
   if(poulsBtn){
     const profScreens = ['sc-prof','sc-eval-items','sc-cats-prof'];
     const isProf = S.user && S.user.role === 'prof';
     poulsBtn.style.display = (isProf && profScreens.includes(id)) ? 'block' : 'none';
+    if(evalRapideBtn) evalRapideBtn.style.display = (isProf && profScreens.includes(id)) ? 'block' : 'none';
   }
   ['nb-home','nb-rew','nb-prog','nb-docs','nb-graph'].forEach(n=>{ const el=document.getElementById(n); if(el) el.classList.remove('on'); });
   if(id==='sc-elv-rew') document.getElementById('nb-rew').classList.add('on');
