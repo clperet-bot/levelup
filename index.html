@@ -1723,8 +1723,10 @@ function scoresToHist(scores){
 // ════════════════════════════════════════
 function bestVal(arr){
   // arr = [{date, val}, ...]
+  // val=-1 = refus/absent, compte comme 0 dans les calculs
   if(!arr||!arr.length) return null;
-  return Math.max(...arr.map(h=>h.val));
+  const vals = arr.map(h=>h.val===-1?0:h.val);
+  return Math.max(...vals);
 }
 
 function top3avg(vals){
@@ -2132,11 +2134,14 @@ async function afficherEvalRapideEleves(item, mat, classeCode, proj){
   titre.style.cssText='font-weight:800;font-size:.8rem;color:#14532d;background:#dcfce7;border-radius:10px;padding:8px 12px;margin-bottom:12px;line-height:1.4;';
   titre.textContent='⚡ '+item.label;
   cont.appendChild(titre);
-  const COLS={0:'#e2e8f0',1:'#d4edda',2:'#90ee90',3:'#228b22',4:'#0b5f0b'};
-  const LABELS=['Pas encore','Un peu','Bien','Très bien','Excellent'];
+  const COLS={'-1':'#dc2626',0:'#e2e8f0',1:'#d4edda',2:'#90ee90',3:'#228b22',4:'#0b5f0b'};
+  const LABELS={'-1':'Refus',0:'Pas encore',1:'Un peu',2:'Bien',3:'Très bien',4:'Excellent'};
   eleves.forEach(elv=>{
     const lastVal = bestVal(histMap[elv.id][item.id]||[]);
-    _evalRapideTemp[elv.id] = lastVal; // pré-rempli avec la dernière valeur
+    // Chercher la vraie dernière valeur brute (pour pré-remplir ✕ si besoin)
+    const rawArr = histMap[elv.id][item.id]||[];
+    const lastRaw = rawArr.length ? rawArr[rawArr.length-1].val : null;
+    _evalRapideTemp[elv.id] = lastRaw;
     const row = document.createElement('div');
     row.style.cssText='display:flex;align-items:center;gap:8px;padding:8px 0;border-bottom:1px solid #f0fdf4;';
     const nom = document.createElement('div');
@@ -2144,17 +2149,38 @@ async function afficherEvalRapideEleves(item, mat, classeCode, proj){
     nom.textContent=formatNomAffichage(elv.nom);
     row.appendChild(nom);
     const circles = document.createElement('div');
-    circles.style.cssText='display:flex;gap:5px;';
+    circles.style.cssText='display:flex;gap:5px;align-items:center;';
+    // Bouton ✕
+    const xBtn = document.createElement('button');
+    const xSel = lastRaw === -1;
+    xBtn.style.cssText=`width:28px;height:28px;border-radius:50%;border:2px solid ${xSel?'#dc2626':'#e2e8f0'};background:${xSel?'#dc2626':'transparent'};cursor:pointer;color:${xSel?'#fff':'#dc2626'};font-size:.75rem;font-weight:900;line-height:1;`;
+    xBtn.textContent='✕';
+    xBtn.onclick=()=>{
+      const already = _evalRapideTemp[elv.id] === -1;
+      _evalRapideTemp[elv.id] = already ? null : -1;
+      const nv = _evalRapideTemp[elv.id];
+      xBtn.style.background = nv===-1?'#dc2626':'transparent';
+      xBtn.style.borderColor = nv===-1?'#dc2626':'#e2e8f0';
+      xBtn.style.color = nv===-1?'#fff':'#dc2626';
+      circles.querySelectorAll('button:not(:first-child)').forEach((b,i)=>{
+        b.style.background = 'transparent'; b.style.borderColor='#e2e8f0';
+      });
+    };
+    circles.appendChild(xBtn);
     [0,1,2,3,4].forEach(v=>{
       const c = document.createElement('button');
-      const sel = lastVal === v;
+      const sel = lastRaw === v;
       c.style.cssText=`width:28px;height:28px;border-radius:50%;border:2px solid ${sel?COLS[v]:'#e2e8f0'};background:${sel?COLS[v]:'transparent'};cursor:pointer;transition:all .15s;`;
       c.title=LABELS[v];
       c.dataset.elv=elv.id; c.dataset.v=v;
       c.onclick=()=>{
-        _evalRapideTemp[elv.id]=v;
-        circles.querySelectorAll('button').forEach((b,i)=>{
-          const bsel=i===v;
+        const already = _evalRapideTemp[elv.id] === v;
+        _evalRapideTemp[elv.id] = already ? null : v;
+        const nv = _evalRapideTemp[elv.id];
+        // Reset ✕
+        xBtn.style.background='transparent'; xBtn.style.borderColor='#e2e8f0'; xBtn.style.color='#dc2626';
+        circles.querySelectorAll('button:not(:first-child)').forEach((b,i)=>{
+          const bsel = nv!==null && i===nv;
           b.style.background=bsel?COLS[i]:'transparent';
           b.style.borderColor=bsel?COLS[i]:'#e2e8f0';
         });
@@ -3394,17 +3420,34 @@ async function openAide(){
   const transIds = TRANSV_CAT_IDS[S.mat] || [];
   const transCats = transIds.map(id=>DATA[S.mat].categories.find(c=>c.id===id)).filter(Boolean);
 
-  // Éval prof de l'élève courant
+  // Éval prof de l'élève courant + auto-éval en fallback
   const myEvals = await getEvalProf(S.user.id, S.mat);
-  const myHist = scoresToHist(myEvals);
+  const myHistProf = scoresToHist(myEvals);
+  const myEvalsElv = await getScores(S.user.id, S.mat);
+  const myHistElv = scoresToHist(myEvalsElv);
+  // Fusionner : prof prime, sinon auto-éval
+  const myHist = {};
+  const allIds = new Set([...Object.keys(myHistProf), ...Object.keys(myHistElv)]);
+  allIds.forEach(id=>{
+    const profVal = bestVal(myHistProf[id]||[]);
+    myHist[id] = profVal !== null ? (myHistProf[id]||[]) : (myHistElv[id]||[]);
+  });
 
-  // Tous les élèves de la classe
+  // Tous les élèves de la classe — même logique
   const camarades = await getElevesOfClasse(code);
-  // Éval prof de chaque camarade
   const camaradeData = {};
   await Promise.all(camarades.filter(e=>e.id!==S.user.id).map(async elv=>{
-    const ev = await getEvalProf(elv.id, S.mat);
-    camaradeData[elv.id] = {nom: elv.nom, hist: scoresToHist(ev)};
+    const evProf = await getEvalProf(elv.id, S.mat);
+    const evElv  = await getScores(elv.id, S.mat);
+    const hProf  = scoresToHist(evProf);
+    const hElv   = scoresToHist(evElv);
+    const hist   = {};
+    const ids = new Set([...Object.keys(hProf), ...Object.keys(hElv)]);
+    ids.forEach(id=>{
+      const profVal = bestVal(hProf[id]||[]);
+      hist[id] = profVal !== null ? (hProf[id]||[]) : (hElv[id]||[]);
+    });
+    camaradeData[elv.id] = {nom: elv.nom, hist};
   }));
 
   cont.innerHTML = '';
@@ -3464,13 +3507,39 @@ async function openAide(){
           });
           if(!helpers.length){
             const myBestCheck = bestVal(myHist[id]||[]);
-            panel.innerHTML='<div style="font-size:.82rem;font-weight:700;color:var(--muted);text-align:center;padding:8px">'
-              +(myBestCheck===null
-                ? '⏳ Tu n\'as pas encore été évalué(e) sur cette compétence.'
-                : myBestCheck === 4
-                  ? '🌟 Tu maîtrises parfaitement cette compétence !'
+            if(myBestCheck === 4){
+              // L'élève maîtrise → montrer ceux qu'il peut aider
+              const toHelp = Object.entries(camaradeData).filter(([elvId, d])=>{
+                const theirBest = bestVal(d.hist[id]||[]);
+                return theirBest === null || theirBest < 4;
+              });
+              if(toHelp.length){
+                panel.innerHTML='<div style="font-size:.75rem;font-weight:800;color:#15803d;margin-bottom:8px">🌟 Tu maîtrises ! Tu peux aider ces camarades :</div>';
+                toHelp.forEach(([elvId, d])=>{
+                  const card = document.createElement('div');
+                  card.style.cssText='display:flex;align-items:center;gap:10px;padding:8px 10px;background:#fff;border-radius:10px;margin-bottom:6px;border:1.5px solid #bbf7d0;';
+                  const init = d.nom.split(' ').filter(Boolean).map(w=>w[0]).join('').slice(0,2).toUpperCase();
+                  const av = document.createElement('div');
+                  av.className='avatar'; av.style.cssText='width:30px;height:30px;font-size:.75rem;flex-shrink:0;background:#dcfce7;color:#15803d;';
+                  av.textContent=init;
+                  const info = document.createElement('div');
+                  info.style.cssText='flex:1;';
+                  const theirBest = bestVal(d.hist[id]||[]);
+                  info.innerHTML='<div style="font-weight:800;font-size:.82rem">'+formatNomAffichage(d.nom)+'</div>'
+                    +'<div style="font-size:.7rem;color:#15803d;font-weight:700">'+(theirBest===null?'Pas encore évalué·e':'Niveau : '+LABELS[theirBest])+'</div>';
+                  card.appendChild(av); card.appendChild(info);
+                  panel.appendChild(card);
+                });
+              } else {
+                panel.innerHTML='<div style="font-size:.82rem;font-weight:700;color:var(--muted);text-align:center;padding:8px">🌟 Toute la classe maîtrise cette compétence !</div>';
+              }
+            } else {
+              panel.innerHTML='<div style="font-size:.82rem;font-weight:700;color:var(--muted);text-align:center;padding:8px">'
+                +(myBestCheck===null
+                  ? '⏳ Tu n\'as pas encore été évalué(e) sur cette compétence.'
                   : '👍 Personne dans ta classe n\'a encore un niveau supérieur au tien.')
-              +'</div>';
+                +'</div>';
+            }
           } else {
             panel.innerHTML='<div style="font-size:.75rem;font-weight:800;color:#4338ca;margin-bottom:8px">Ces camarades peuvent t\'aider :</div>';
             helpers.forEach(([elvId, d])=>{
@@ -5246,20 +5315,31 @@ async function openEvalCat(catId){
 function renderEvalItems(cat, hist, projCreatedAt){
   const list=document.getElementById('eval-items-list');
   list.innerHTML='';
-  const COLS={0:'#e2e8f0',1:'#d4edda',2:'#90ee90',3:'#228b22',4:'#0b5f0b'};
-  const FG={0:'#475569',1:'#166534',2:'#14532d',3:'#fff',4:'#fff'};
-  const LABELS=['Pas encore','Un peu','Bien','Très bien','Excellent'];
+  const COLS={'-1':'#fee2e2',0:'#e2e8f0',1:'#d4edda',2:'#90ee90',3:'#228b22',4:'#0b5f0b'};
+  const FG={'-1':'#dc2626',0:'#475569',1:'#166534',2:'#14532d',3:'#fff',4:'#fff'};
+  const LABELS={'-1':'Refus','0':'Pas encore','1':'Un peu','2':'Bien','3':'Très bien','4':'Excellent'};
   cat.items.forEach(it=>{
     const tc=it.t==='c'?'ic':it.t==='o'?'io':'is';
     const ih=hist[it.id]||[];
     const best=bestVal(ih);
-    if(best!==null) SE.temp[it.id]=best;
+    // pré-remplir SE.temp avec la vraie dernière valeur (pas bestVal, la dernière entrée)
+    const lastRaw = ih.length ? ih[ih.length-1].val : null;
+    if(lastRaw!==null) SE.temp[it.id]=lastRaw;
     const noteItem = itemScoreProf(it.id, hist, projCreatedAt||null);
     const circlesDiv = document.createElement('div');
     circlesDiv.className = 'circles';
+    // Bouton ✕ (refus, val=-1)
+    const xBtn = document.createElement('button');
+    xBtn.className = 'circle'+(lastRaw===-1?' s-1':'');
+    xBtn.dataset.id = it.id;
+    xBtn.dataset.v = '-1';
+    xBtn.style.cssText='background:'+(lastRaw===-1?'#dc2626':'transparent')+';border-color:'+(lastRaw===-1?'#dc2626':'#e2e8f0')+';color:'+(lastRaw===-1?'#fff':'#dc2626')+';font-size:.8rem;font-weight:900;';
+    xBtn.textContent='✕';
+    xBtn.addEventListener('click', ()=>setEvalScore(it.id, -1));
+    circlesDiv.appendChild(xBtn);
     [0,1,2,3,4].forEach(v=>{
       const btn = document.createElement('button');
-      btn.className = 'circle'+(best===v?' s'+v:'');
+      btn.className = 'circle'+(lastRaw===v?' s'+v:'');
       btn.dataset.id = it.id;
       btn.dataset.v = String(v);
       btn.addEventListener('click', ()=>setEvalScore(it.id, v));
@@ -5273,10 +5353,10 @@ function renderEvalItems(cat, hist, projCreatedAt){
       histHtml='<div class="obs-hist" style="margin-top:8px;flex-wrap:wrap;gap:4px;display:flex">';
       ih.slice().reverse().forEach(e=>{
         const dt=new Date(e.date).toLocaleDateString('fr-FR',{day:'2-digit',month:'2-digit'});
-        const v=e.val;
+        const v=String(e.val);
         const delId=e.id||'';
-        histHtml+='<span class="obs-chip" style="background:'+COLS[v]+';color:'+FG[v]+';display:flex;align-items:center;gap:4px;padding:3px 8px;border-radius:8px;font-size:.7rem;font-weight:700">'
-          +dt+' : '+LABELS[v]
+        histHtml+='<span class="obs-chip" style="background:'+(COLS[v]||'#e2e8f0')+';color:'+(FG[v]||'#475569')+';display:flex;align-items:center;gap:4px;padding:3px 8px;border-radius:8px;font-size:.7rem;font-weight:700">'
+          +dt+' : '+(LABELS[v]||v)
           +(delId?'<button onclick="deleteEvalEntry(\''+delId+'\',\''+it.id+'\')" style="background:rgba(0,0,0,.15);border:none;border-radius:4px;cursor:pointer;font-size:.65rem;padding:1px 4px;color:inherit;line-height:1">✕</button>':'')
           +'</span>';
       });
@@ -5300,13 +5380,22 @@ async function deleteEvalEntry(entryId, itemId){
 }
 
 function setEvalScore(itemId, val){
-  SE.temp[itemId]=val;
-  // Chercher tous les boutons cercle avec ce data-id dans toute la liste
+  // Toggle : reclique sur la même valeur → désélectionne
+  const current = SE.temp[itemId];
+  const newVal = current === val ? null : val;
+  SE.temp[itemId] = newVal;
   const list = document.getElementById('eval-items-list');
   if(!list) return;
   list.querySelectorAll('.circle[data-id="'+itemId+'"]').forEach(btn=>{
-    const v=parseInt(btn.dataset.v);
-    btn.className='circle'+(v===val?' s'+val:'');
+    const v = parseInt(btn.dataset.v); // -1, 0, 1, 2, 3, 4
+    const sel = newVal !== null && v === newVal;
+    if(v === -1){
+      btn.style.background = sel ? '#dc2626' : 'transparent';
+      btn.style.borderColor = sel ? '#dc2626' : '#e2e8f0';
+      btn.style.color = sel ? '#fff' : '#dc2626';
+    } else {
+      btn.className = 'circle'+(sel?' s'+v:'');
+    }
   });
 }
 
