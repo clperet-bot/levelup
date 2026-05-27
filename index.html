@@ -2150,8 +2150,6 @@ async function afficherEvalRapideEleves(item, mat, classeCode, proj){
   titre.style.cssText='font-weight:800;font-size:.8rem;color:#14532d;background:#dcfce7;border-radius:10px;padding:8px 12px;margin-bottom:12px;line-height:1.4;';
   titre.textContent='⚡ '+item.label;
   cont.appendChild(titre);
-  const COLS={'-1':'#dc2626',0:'#e2e8f0',1:'#d4edda',2:'#90ee90',3:'#228b22',4:'#0b5f0b'};
-  const LABELS={'-1':'Refus',0:'Pas encore',1:'Un peu',2:'Bien',3:'Très bien',4:'Excellent'};
   const COLS={'-1':'#dc2626',0:'#94a3b8',1:'#86efac',2:'#4ade80',3:'#16a34a',4:'#14532d'};
   const LABELS={'-1':'Refus',0:'Pas encore',1:'Un peu',2:'Bien',3:'Très bien',4:'Excellent'};
   eleves.forEach(elv=>{
