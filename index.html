@@ -2152,9 +2152,9 @@ async function afficherEvalRapideEleves(item, mat, classeCode, proj){
   cont.appendChild(titre);
   const COLS={'-1':'#dc2626',0:'#e2e8f0',1:'#d4edda',2:'#90ee90',3:'#228b22',4:'#0b5f0b'};
   const LABELS={'-1':'Refus',0:'Pas encore',1:'Un peu',2:'Bien',3:'Très bien',4:'Excellent'};
+  const COLS={'-1':'#dc2626',0:'#94a3b8',1:'#86efac',2:'#4ade80',3:'#16a34a',4:'#14532d'};
+  const LABELS={'-1':'Refus',0:'Pas encore',1:'Un peu',2:'Bien',3:'Très bien',4:'Excellent'};
   eleves.forEach(elv=>{
-    const lastVal = bestVal(histMap[elv.id][item.id]||[]);
-    // Chercher la vraie dernière valeur brute (pour pré-remplir ✕ si besoin)
     const rawArr = histMap[elv.id][item.id]||[];
     const lastRaw = rawArr.length ? rawArr[rawArr.length-1].val : null;
     _evalRapideTemp[elv.id] = lastRaw;
@@ -2166,44 +2166,45 @@ async function afficherEvalRapideEleves(item, mat, classeCode, proj){
     row.appendChild(nom);
     const circles = document.createElement('div');
     circles.style.cssText='display:flex;gap:5px;align-items:center;';
-    // Bouton ✕
+
     const xBtn = document.createElement('button');
-    const xSel = lastRaw === -1;
-    xBtn.style.cssText=`width:32px;height:32px;border-radius:50%;border:2.5px solid ${xSel?'#dc2626':'#fca5a5'};background:${xSel?'#dc2626':'#fff5f5'};cursor:pointer;color:${xSel?'#fff':'#dc2626'};font-size:.75rem;font-weight:900;line-height:1;`;
+    const numBtns = [];
+
+    function updateCircles(val){
+      const xSel = val === -1;
+      xBtn.style.background = xSel ? '#dc2626' : 'transparent';
+      xBtn.style.borderColor = xSel ? '#dc2626' : '#fca5a5';
+      xBtn.style.color = xSel ? '#fff' : '#dc2626';
+      numBtns.forEach((b,i)=>{
+        const sel = val === i;
+        b.style.background = sel ? COLS[i] : 'transparent';
+        b.style.borderColor = sel ? COLS[i] : '#94a3b8';
+      });
+    }
+
+    xBtn.style.cssText=`width:30px;height:30px;border-radius:50%;border:2px solid ${lastRaw===-1?'#dc2626':'#fca5a5'};background:${lastRaw===-1?'#dc2626':'transparent'};cursor:pointer;color:${lastRaw===-1?'#fff':'#dc2626'};font-size:.75rem;font-weight:900;line-height:1;`;
     xBtn.textContent='✕';
     xBtn.onclick=()=>{
       const already = _evalRapideTemp[elv.id] === -1;
       _evalRapideTemp[elv.id] = already ? null : -1;
-      const nv = _evalRapideTemp[elv.id];
-      xBtn.style.background = nv===-1?'#dc2626':'transparent';
-      xBtn.style.borderColor = nv===-1?'#dc2626':'#e2e8f0';
-      xBtn.style.color = nv===-1?'#fff':'#dc2626';
-      circles.querySelectorAll('button:not(:first-child)').forEach((b,i)=>{
-        b.style.background = 'transparent'; b.style.borderColor='#e2e8f0';
-      });
+      updateCircles(_evalRapideTemp[elv.id]);
     };
     circles.appendChild(xBtn);
+
     [0,1,2,3,4].forEach(v=>{
       const c = document.createElement('button');
       const sel = lastRaw === v;
-      const BG_UNSEL = ['#f1f5f9','#dcfce7','#bbf7d0','#4ade80','#166534'];
-      c.style.cssText=`width:32px;height:32px;border-radius:50%;border:2.5px solid ${sel?COLS[v]:'#cbd5e1'};background:${sel?COLS[v]:BG_UNSEL[v]};cursor:pointer;transition:all .15s;`;
+      c.style.cssText=`width:30px;height:30px;border-radius:50%;border:2px solid ${sel?COLS[v]:'#94a3b8'};background:${sel?COLS[v]:'transparent'};cursor:pointer;transition:all .15s;`;
       c.title=LABELS[v];
-      c.dataset.elv=elv.id; c.dataset.v=v;
       c.onclick=()=>{
         const already = _evalRapideTemp[elv.id] === v;
         _evalRapideTemp[elv.id] = already ? null : v;
-        const nv = _evalRapideTemp[elv.id];
-        // Reset ✕
-        xBtn.style.background='transparent'; xBtn.style.borderColor='#e2e8f0'; xBtn.style.color='#dc2626';
-        circles.querySelectorAll('button:not(:first-child)').forEach((b,i)=>{
-          const bsel = nv!==null && i===nv;
-          b.style.background=bsel?COLS[i]:BG_UNSEL[i];
-          b.style.borderColor=bsel?COLS[i]:'#cbd5e1';
-        });
+        updateCircles(_evalRapideTemp[elv.id]);
       };
+      numBtns.push(c);
       circles.appendChild(c);
     });
+
     row.appendChild(circles);
     cont.appendChild(row);
   });
