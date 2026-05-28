@@ -2176,11 +2176,11 @@ async function afficherEvalRapideEleves(item, mat, classeCode, proj){
       numBtns.forEach((b,i)=>{
         const sel = val === i;
         b.style.background = sel ? COLS[i] : 'transparent';
-        b.style.borderColor = sel ? COLS[i] : '#94a3b8';
+        b.style.borderColor = sel ? COLS[i] : '#cbd5e1';
       });
     }
 
-    xBtn.style.cssText=`width:30px;height:30px;border-radius:50%;border:2px solid ${lastRaw===-1?'#dc2626':'#fca5a5'};background:${lastRaw===-1?'#dc2626':'transparent'};cursor:pointer;color:${lastRaw===-1?'#fff':'#dc2626'};font-size:.75rem;font-weight:900;line-height:1;`;
+      xBtn.style.cssText=`width:30px;height:30px;border-radius:50%;border:2px solid ${lastRaw===-1?'#dc2626':'#fca5a5'};background:${lastRaw===-1?'#dc2626':'transparent'};cursor:pointer;color:${lastRaw===-1?'#fff':'#dc2626'};font-size:.75rem;font-weight:900;line-height:1;`;
     xBtn.textContent='✕';
     xBtn.onclick=()=>{
       const already = _evalRapideTemp[elv.id] === -1;
@@ -2192,7 +2192,7 @@ async function afficherEvalRapideEleves(item, mat, classeCode, proj){
     [0,1,2,3,4].forEach(v=>{
       const c = document.createElement('button');
       const sel = lastRaw === v;
-      c.style.cssText=`width:30px;height:30px;border-radius:50%;border:2px solid ${sel?COLS[v]:'#94a3b8'};background:${sel?COLS[v]:'transparent'};cursor:pointer;transition:all .15s;`;
+      c.style.cssText=`width:30px;height:30px;border-radius:50%;border:2px solid ${sel?COLS[v]:'#cbd5e1'};background:${sel?COLS[v]:'transparent'};cursor:pointer;transition:all .15s;`;
       c.title=LABELS[v];
       c.onclick=()=>{
         const already = _evalRapideTemp[elv.id] === v;
